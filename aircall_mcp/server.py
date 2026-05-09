@@ -89,9 +89,9 @@ def add_call_comment(call_id: int, content: str) -> dict:
 
 
 @mcp.tool()
-def tag_call(call_id: int, tag_ids_json: str) -> dict:
-    """Tag a call with one or more tag IDs. tag_ids_json must be a JSON array of integers, e.g. '[1, 2, 3]'."""
-    return _client().tag_call(call_id=call_id, tag_ids_json=tag_ids_json)
+def tag_call(call_id: int, tag_ids: list) -> dict:
+    """Tag a call with one or more tag IDs."""
+    return _client().tag_call(call_id=call_id, tag_ids=tag_ids)
 
 
 @mcp.tool()
@@ -127,15 +127,15 @@ def get_contact(contact_id: int) -> dict:
 def create_contact(
     first_name: str,
     last_name: str = "",
-    phone_numbers_json: str = "",
-    emails_json: str = "",
+    phone_numbers: list = "",
+    emails: list = "",
 ) -> dict:
-    """Create a new contact. phone_numbers_json and emails_json are JSON arrays of objects, e.g. '[{"label":"work","value":"+1555..."}]'. Leave empty to omit."""
+    """Create a new contact. phone_numbers and emails are optional arrays of objects."""
     return _client().create_contact(
         first_name=first_name,
         last_name=last_name,
-        phone_numbers_json=phone_numbers_json,
-        emails_json=emails_json,
+        phone_numbers=phone_numbers,
+        emails=emails,
     )
 
 
@@ -144,14 +144,14 @@ def update_contact(
     contact_id: int,
     first_name: str = "",
     last_name: str = "",
-    phone_numbers_json: str = "",
+    phone_numbers: list = "",
 ) -> dict:
-    """Update a contact. Only fields with non-empty values are sent. phone_numbers_json is a JSON array of objects."""
+    """Update a contact. Only fields with non-empty values are sent. phone_numbers is an optional array of objects."""
     return _client().update_contact(
         contact_id=contact_id,
         first_name=first_name,
         last_name=last_name,
-        phone_numbers_json=phone_numbers_json,
+        phone_numbers=phone_numbers,
     )
 
 

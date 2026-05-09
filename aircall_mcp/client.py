@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import base64, json, os, sys, time, requests
+import base64, os, sys, time, requests
 from pathlib import Path
 
 BASE_URL = "https://api.aircall.io/v1"
@@ -148,9 +148,10 @@ class AircallClient:
         """Add a comment to a call."""
         return self.post(f"/calls/{call_id}/comments", body={"content": content})
 
-    def tag_call(self, call_id, tag_ids_json):
-        """Tag a call. tag_ids_json is a JSON string of a list of ints, e.g. '[1,2,3]'."""
-        tag_ids = json.loads(tag_ids_json)
+    def tag_call(self, call_id, tag_ids):
+        """Tag a call with a list of tag IDs."""
+        if not isinstance(tag_ids, list):
+            raise ValueError("tag_ids must be a list of tag IDs")
         return self.post(f"/calls/{call_id}/tags", body={"tag_ids": tag_ids})
 
     def get_call_transcript(self, call_id):
@@ -177,20 +178,24 @@ class AircallClient:
         return self.get(f"/contacts/{contact_id}")
 
     def create_contact(
-        self, first_name, last_name="", phone_numbers_json="", emails_json=""
+        self, first_name, last_name="", phone_numbers="", emails=""
     ):
-        """Create a contact. phone_numbers_json and emails_json are JSON strings of lists; only included if non-empty."""
+        """Create a contact. phone_numbers and emails are optional lists."""
         body = {"first_name": first_name}
         if last_name:
             body["last_name"] = last_name
-        if phone_numbers_json:
-            body["phone_numbers"] = json.loads(phone_numbers_json)
-        if emails_json:
-            body["emails"] = json.loads(emails_json)
+        if phone_numbers:
+            if not isinstance(phone_numbers, list):
+                raise ValueError("phone_numbers must be a list")
+            body["phone_numbers"] = phone_numbers
+        if emails:
+            if not isinstance(emails, list):
+                raise ValueError("emails must be a list")
+            body["emails"] = emails
         return self.post("/contacts", body=body)
 
     def update_contact(
-        self, contact_id, first_name="", last_name="", phone_numbers_json=""
+        self, contact_id, first_name="", last_name="", phone_numbers=""
     ):
         """Update a contact. Only non-empty fields are sent."""
         body = {}
@@ -198,8 +203,10 @@ class AircallClient:
             body["first_name"] = first_name
         if last_name:
             body["last_name"] = last_name
-        if phone_numbers_json:
-            body["phone_numbers"] = json.loads(phone_numbers_json)
+        if phone_numbers:
+            if not isinstance(phone_numbers, list):
+                raise ValueError("phone_numbers must be a list")
+            body["phone_numbers"] = phone_numbers
         return self.patch(f"/contacts/{contact_id}", body=body)
 
     def delete_contact(self, contact_id):
