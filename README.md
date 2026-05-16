@@ -1,5 +1,11 @@
 # aircall-mcp
 
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-F59E0B.svg)](https://opensource.org/licenses/MIT)
+[![22 tools](https://img.shields.io/badge/tools-22-22C55E.svg)](https://github.com/RosenAdvertising/aircall-mcp)
+[![MCP](https://img.shields.io/badge/MCP-compatible-7C3AED.svg)](https://modelcontextprotocol.io)
+[![Aircall](https://img.shields.io/badge/Aircall-API-00BC70.svg)](https://developer.aircall.io)
+
 MCP server for Aircall — calls, contacts, transcripts, numbers, and team management for law firms.
 
 ## Requirements
