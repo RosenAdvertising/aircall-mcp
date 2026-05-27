@@ -57,30 +57,30 @@ Add to `claude_desktop_config.json`:
 
 ## Tools (22 total)
 
-| Tool | Description |
-|------|-------------|
-| `get_company` | Company details |
-| `list_numbers` | List phone numbers |
-| `get_number` | Get number by ID |
-| `list_calls` | List calls with optional filters |
-| `get_call` | Get call by ID |
-| `initiate_call` | Start an outbound call |
-| `transfer_call` | Transfer an active call |
-| `add_call_comment` | Add comment to a call |
-| `tag_call` | Tag a call with tag IDs |
+| Tool                  | Description                              |
+| --------------------- | ---------------------------------------- |
+| `get_company`         | Company details                          |
+| `list_numbers`        | List phone numbers                       |
+| `get_number`          | Get number by ID                         |
+| `list_calls`          | List calls with optional filters         |
+| `get_call`            | Get call by ID                           |
+| `initiate_call`       | Start an outbound call                   |
+| `transfer_call`       | Transfer an active call                  |
+| `add_call_comment`    | Add comment to a call                    |
+| `tag_call`            | Tag a call with tag IDs                  |
 | `get_call_transcript` | Get call transcript (requires AI add-on) |
-| `get_call_summary` | Get AI call summary |
-| `list_contacts` | List contacts with optional search |
-| `get_contact` | Get contact by ID |
-| `create_contact` | Create a new contact |
-| `update_contact` | Update a contact |
-| `delete_contact` | Delete a contact |
-| `list_users` | List account users |
-| `get_user` | Get user by ID |
-| `list_teams` | List teams |
-| `get_team` | Get team by ID |
-| `list_tags` | List call tags |
-| `create_tag` | Create a new tag |
+| `get_call_summary`    | Get AI call summary                      |
+| `list_contacts`       | List contacts with optional search       |
+| `get_contact`         | Get contact by ID                        |
+| `create_contact`      | Create a new contact                     |
+| `update_contact`      | Update a contact                         |
+| `delete_contact`      | Delete a contact                         |
+| `list_users`          | List account users                       |
+| `get_user`            | Get user by ID                           |
+| `list_teams`          | List teams                               |
+| `get_team`            | Get team by ID                           |
+| `list_tags`           | List call tags                           |
+| `create_tag`          | Create a new tag                         |
 
 ## Auth
 

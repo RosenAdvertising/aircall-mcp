@@ -14,7 +14,9 @@ ENV_FILE = CONFIG_DIR / ".env"
 def main():
     print("Aircall MCP Setup")
     print("-" * 40)
-    print("Find your credentials at: aircall.io -> Admin -> API Keys -> Own API Key integration")
+    print(
+        "Find your credentials at: aircall.io -> Admin -> API Keys -> Own API Key integration"
+    )
     print()
 
     api_id = input("Enter your Aircall API ID: ").strip()

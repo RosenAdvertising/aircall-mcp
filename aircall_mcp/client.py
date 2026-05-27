@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-import base64, os, sys, time, requests
+import base64
+import os
+import sys
+import time
+import requests
 from pathlib import Path
 
 BASE_URL = "https://api.aircall.io/v1"
@@ -41,9 +45,7 @@ class AircallClient:
         api_id = os.environ.get("AIRCALL_API_ID", "")
         api_token = os.environ.get("AIRCALL_API_TOKEN", "")
         if not api_id or not api_token:
-            raise RuntimeError(
-                "Aircall credentials not found. Run: aircall-mcp-setup"
-            )
+            raise RuntimeError("Aircall credentials not found. Run: aircall-mcp-setup")
         credentials = base64.b64encode(f"{api_id}:{api_token}".encode()).decode()
         self.session = requests.Session()
         self.session.headers.update(
@@ -58,9 +60,7 @@ class AircallClient:
         url = f"{BASE_URL}/{path.lstrip('/')}"
         resp = self.session.request(method, url, params=params, json=json_body)
         if resp.status_code == 401:
-            raise RuntimeError(
-                "Aircall credentials invalid. Run: aircall-mcp-setup"
-            )
+            raise RuntimeError("Aircall credentials invalid. Run: aircall-mcp-setup")
         if resp.status_code == 429 and _rate_retries < 3:
             wait = _retry_after_seconds(resp)
             print(f"Rate limited. Waiting {wait}s...", file=sys.stderr)
@@ -177,9 +177,7 @@ class AircallClient:
         """Get a specific contact by ID."""
         return self.get(f"/contacts/{contact_id}")
 
-    def create_contact(
-        self, first_name, last_name="", phone_numbers="", emails=""
-    ):
+    def create_contact(self, first_name, last_name="", phone_numbers="", emails=""):
         """Create a contact. phone_numbers and emails are optional lists."""
         body = {"first_name": first_name}
         if last_name:
@@ -194,9 +192,7 @@ class AircallClient:
             body["emails"] = emails
         return self.post("/contacts", body=body)
 
-    def update_contact(
-        self, contact_id, first_name="", last_name="", phone_numbers=""
-    ):
+    def update_contact(self, contact_id, first_name="", last_name="", phone_numbers=""):
         """Update a contact. Only non-empty fields are sent."""
         body = {}
         if first_name:
