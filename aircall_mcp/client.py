@@ -168,7 +168,7 @@ class AircallClient:
 
     def list_contacts(self, page=1, per_page=25, query=""):
         """List contacts. Sends search param only if query is non-empty."""
-        params = {"page": page, "per_page": per_page}
+        params: dict[str, int | str] = {"page": page, "per_page": per_page}
         if query:
             params["search"] = query
         return self.get("/contacts", params=params)
@@ -177,9 +177,15 @@ class AircallClient:
         """Get a specific contact by ID."""
         return self.get(f"/contacts/{contact_id}")
 
-    def create_contact(self, first_name, last_name="", phone_numbers="", emails=""):
+    def create_contact(
+        self,
+        first_name: str,
+        last_name: str = "",
+        phone_numbers: list | None = None,
+        emails: list | None = None,
+    ):
         """Create a contact. phone_numbers and emails are optional lists."""
-        body = {"first_name": first_name}
+        body: dict[str, str | list] = {"first_name": first_name}
         if last_name:
             body["last_name"] = last_name
         if phone_numbers:
@@ -192,9 +198,15 @@ class AircallClient:
             body["emails"] = emails
         return self.post("/contacts", body=body)
 
-    def update_contact(self, contact_id, first_name="", last_name="", phone_numbers=""):
+    def update_contact(
+        self,
+        contact_id,
+        first_name: str = "",
+        last_name: str = "",
+        phone_numbers: list | None = None,
+    ):
         """Update a contact. Only non-empty fields are sent."""
-        body = {}
+        body: dict[str, str | list] = {}
         if first_name:
             body["first_name"] = first_name
         if last_name:

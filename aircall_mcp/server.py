@@ -127,8 +127,8 @@ def get_contact(contact_id: int) -> dict:
 def create_contact(
     first_name: str,
     last_name: str = "",
-    phone_numbers: list = "",
-    emails: list = "",
+    phone_numbers: list | None = None,
+    emails: list | None = None,
 ) -> dict:
     """Create a new contact. phone_numbers and emails are optional arrays of objects."""
     return _client().create_contact(
@@ -144,7 +144,7 @@ def update_contact(
     contact_id: int,
     first_name: str = "",
     last_name: str = "",
-    phone_numbers: list = "",
+    phone_numbers: list | None = None,
 ) -> dict:
     """Update a contact. Only fields with non-empty values are sent. phone_numbers is an optional array of objects."""
     return _client().update_contact(
