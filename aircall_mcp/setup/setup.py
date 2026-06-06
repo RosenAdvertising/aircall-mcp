@@ -29,6 +29,9 @@ def main():
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     CONFIG_DIR.chmod(0o700)
 
+    # Credentials are stored in a chmod-0600 file. A pluggable OS-keyring backend
+    # (macOS Keychain / Windows Credential Manager / Linux Secret Service) is being
+    # evaluated as optional hardening; see the "pluggable OS-keyring" MCP task.
     with open(ENV_FILE, "w") as f:
         f.write(f"AIRCALL_API_ID={api_id}\n")
         f.write(f"AIRCALL_API_TOKEN={api_token}\n")
