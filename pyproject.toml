@@ -7,7 +7,7 @@ name = "aircall-mcp"
 version = "0.1.0"
 description = "MCP server for Aircall — calls, contacts, transcripts, numbers, and team management for law firms"
 requires-python = ">=3.10"
-dependencies = ["mcp>=1.0.0", "requests>=2.31.0", "python-dotenv>=1.0.0"]
+dependencies = ["mcp>=1.0.0", "requests>=2.31.0", "python-dotenv>=1.2.2"]
 
 [project.scripts]
 aircall-mcp = "aircall_mcp.server:main"
