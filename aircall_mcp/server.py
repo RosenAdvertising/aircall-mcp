@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Aircall MCP server — calls, contacts, transcripts, numbers, and team management."""
 
+import json
+
 from mcp.server.fastmcp import FastMCP
 from aircall_mcp.client import AircallClient
 
@@ -210,6 +212,99 @@ def list_tags() -> dict:
 def create_tag(name: str, color: str = "") -> dict:
     """Create a new call tag. color is optional (leave empty to omit)."""
     return _client().create_tag(name=name, color=color)
+
+
+# ---------------------------------------------------------------------------
+# Resources
+# ---------------------------------------------------------------------------
+
+
+@mcp.resource("aircall://numbers", mime_type="application/json")
+def numbers_resource() -> str:
+    """All phone numbers configured in this Aircall account — read-only reference data."""
+    return json.dumps(_client().list_numbers(per_page=100), indent=2)
+
+
+@mcp.resource("aircall://tags", mime_type="application/json")
+def tags_resource() -> str:
+    """All call tags defined in this Aircall account — read-only reference data."""
+    return json.dumps(_client().list_tags(), indent=2)
+
+
+@mcp.resource("aircall://security-notes", mime_type="text/markdown")
+def security_notes_resource() -> str:
+    """Security posture for aircall-mcp.
+
+    ## Credentials
+    - **AIRCALL_API_ID** and **AIRCALL_API_TOKEN**: Aircall API key pair (Basic Auth).
+    - Resolution order: OS keyring (macOS Keychain / libsecret) → process env →
+      `~/.aircall-mcp/.env` (chmod 0600 fallback). Set via `aircall-mcp-setup`.
+
+    ## Tool classification
+    - **Read-only (safe):** get_company, list_numbers, get_number, list_calls, get_call,
+      get_call_transcript, get_call_summary, list_contacts, get_contact, list_users,
+      get_user, list_teams, get_team, list_tags.
+    - **Write / side-effect:** initiate_call, transfer_call, add_call_comment, tag_call,
+      create_contact, update_contact, delete_contact, create_tag.
+
+    ## Data sensitivity
+    Calls, transcripts, and contacts may contain privileged attorney-client communications.
+    Handle with legal-privilege care; do not log or cache call content outside the firm's
+    approved systems.
+    """
+    return security_notes_resource.__doc__ or ""
+
+
+# ---------------------------------------------------------------------------
+# Prompts
+# ---------------------------------------------------------------------------
+
+
+@mcp.prompt()
+def missed_call_follow_up() -> str:
+    """Review missed calls and draft follow-up tasks for each one."""
+    return """You are a legal intake coordinator. A missed call from a prospective client
+can mean a lost case. Work through these steps:
+
+1. Call list_calls with status filter or review recent calls — identify any with
+   missed/voicemail status (check the 'status' or 'missed_call' field).
+2. For each missed call: call get_call to get full details including caller number.
+3. Search list_contacts for the caller number to find an existing contact record.
+4. If no contact found: note this as a new potential client.
+5. Use add_call_comment on each missed call to log the follow-up action taken
+   (e.g. "Voicemail left 2026-06-10; follow-up call scheduled").
+6. Tag each missed call using tag_call with the appropriate follow-up tag.
+7. Output a summary: caller, time, contact found (yes/no), action logged."""
+
+
+@mcp.prompt()
+def call_review(call_id: str) -> str:
+    """Full review of a specific call: transcript, summary, and recommended actions."""
+    return f"""Review call {call_id} thoroughly:
+
+1. Call get_call({call_id}) — capture caller, number used, duration, direction.
+2. Call get_call_transcript({call_id}) — read the full transcript.
+3. Call get_call_summary({call_id}) — read the AI summary.
+4. Identify: was this a new client inquiry, existing client matter, or vendor call?
+5. If new inquiry: check list_contacts for the caller; recommend create_contact if absent.
+6. Flag any action items from the call content (deadlines mentioned, promises made,
+   next steps agreed).
+7. Use add_call_comment to log a one-paragraph summary of findings and next actions."""
+
+
+@mcp.prompt()
+def team_call_report() -> str:
+    """Daily call volume and team activity summary across all numbers."""
+    return """Generate a daily call report for the legal team:
+
+1. Call list_numbers — get all active Aircall numbers and their labels.
+2. For each number: call list_calls filtered to today (use from_ts/to_ts for today's
+   Unix timestamps) — count total, answered, missed.
+3. Call list_teams — identify which teams handle which numbers.
+4. Call get_call_statistics equivalent by aggregating: total calls, total missed,
+   total duration across all numbers today.
+5. Output a table: Number | Label | Total Calls | Missed | Avg Duration.
+6. Highlight any number with missed rate > 20% — flag for staffing review."""
 
 
 # ---------------------------------------------------------------------------
