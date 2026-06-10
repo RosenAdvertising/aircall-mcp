@@ -4,24 +4,13 @@ import os
 import sys
 import time
 import requests
-from pathlib import Path
+
+from aircall_mcp import credentials
 
 BASE_URL = "https://api.aircall.io/v1"
-CONFIG_DIR = Path.home() / ".aircall-mcp"
 
-
-def _load_env():
-    env_file = CONFIG_DIR / ".env"
-    if env_file.exists():
-        with open(env_file) as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    key, val = line.split("=", 1)
-                    os.environ.setdefault(key.strip(), val.strip())
-
-
-_load_env()
+# Resolve credentials through the pluggable store (OS keyring -> .env file).
+credentials.load_into_environ(["AIRCALL_API_ID", "AIRCALL_API_TOKEN"])
 
 
 def _retry_after_seconds(resp, default=10):

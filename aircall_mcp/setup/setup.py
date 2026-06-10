@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""Interactive setup: prompts for Aircall credentials and saves them to ~/.aircall-mcp/.env."""
+"""Interactive setup: prompts for Aircall credentials and stores them securely.
+
+Credentials are saved to the OS keyring by default (macOS Keychain / Windows
+Credential Manager / Linux Secret Service), falling back to a 0600 ``.env`` file
+when no keyring backend is available or ``AIRCALL_MCP_USE_KEYRING=0`` is set.
+"""
 
 import os
-from pathlib import Path
 
+from aircall_mcp import credentials
 from aircall_mcp.setup.verify import verify
-
-
-CONFIG_DIR = Path.home() / ".aircall-mcp"
-ENV_FILE = CONFIG_DIR / ".env"
 
 
 def main():
@@ -26,18 +27,15 @@ def main():
         print("Error: Both API ID and API Token are required.")
         raise SystemExit(1)
 
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    CONFIG_DIR.chmod(0o700)
+    backend = credentials.set_secret("AIRCALL_API_ID", api_id)
+    credentials.set_secret("AIRCALL_API_TOKEN", api_token)
 
-    # Credentials are stored in a chmod-0600 file. A pluggable OS-keyring backend
-    # (macOS Keychain / Windows Credential Manager / Linux Secret Service) is being
-    # evaluated as optional hardening; see the "pluggable OS-keyring" MCP task.
-    with open(ENV_FILE, "w") as f:
-        f.write(f"AIRCALL_API_ID={api_id}\n")
-        f.write(f"AIRCALL_API_TOKEN={api_token}\n")
-
-    ENV_FILE.chmod(0o600)
-    print(f"\nCredentials saved to {ENV_FILE}")
+    if backend == "keyring":
+        print(
+            f"\nCredentials saved to the OS keyring ({credentials.storage_backend()})."
+        )
+    else:
+        print(f"\nCredentials saved to {credentials.ENV_FILE} (0600).")
 
     # Set for this process so verify() can use them immediately
     os.environ["AIRCALL_API_ID"] = api_id
