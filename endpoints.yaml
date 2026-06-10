@@ -1,0 +1,45 @@
+tools:
+  - name: get_company
+    read_write: read
+  - name: list_numbers
+    read_write: read
+  - name: get_number
+    read_write: read
+  - name: list_calls
+    read_write: read
+  - name: get_call
+    read_write: read
+  - name: initiate_call
+    read_write: write
+  - name: transfer_call
+    read_write: write
+  - name: add_call_comment
+    read_write: write
+  - name: tag_call
+    read_write: write
+  - name: get_call_transcript
+    read_write: read
+  - name: get_call_summary
+    read_write: read
+  - name: list_contacts
+    read_write: read
+  - name: get_contact
+    read_write: read
+  - name: create_contact
+    read_write: write
+  - name: update_contact
+    read_write: write
+  - name: delete_contact
+    read_write: write
+  - name: list_users
+    read_write: read
+  - name: get_user
+    read_write: read
+  - name: list_teams
+    read_write: read
+  - name: get_team
+    read_write: read
+  - name: list_tags
+    read_write: read
+  - name: create_tag
+    read_write: write
