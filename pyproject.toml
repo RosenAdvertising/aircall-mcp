@@ -6,6 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "aircall-mcp"
 version = "0.1.0"
 description = "MCP server for Aircall — calls, contacts, transcripts, numbers, and team management for law firms"
+license = { text = "MIT" }
 requires-python = ">=3.10"
 dependencies = [
     "mcp>=1.28.1,<2",
