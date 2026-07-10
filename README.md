@@ -6,6 +6,11 @@
 [![MCP](https://img.shields.io/badge/MCP-compatible-7C3AED.svg)](https://modelcontextprotocol.io)
 [![Aircall](https://img.shields.io/badge/Aircall-API-00BC70.svg)](https://developer.aircall.io)
 
+<!-- prettier-ignore -->
+> [!IMPORTANT]
+> **Built to spec — not yet verified against a live Aircall account.**
+> This server was built from Aircall's public API documentation and passes its full offline test suite, but we don't currently have Aircall API access to verify behavior against the live API. Endpoint paths, parameters, and response shapes follow the documented spec. If you hit a discrepancy, please open an issue.
+
 MCP server for Aircall — calls, contacts, transcripts, numbers, and team management for law firms.
 
 ## Requirements
