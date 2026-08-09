@@ -2,11 +2,36 @@
 """Aircall MCP server — calls, contacts, transcripts, numbers, and team management."""
 
 import json
+from typing import Annotated
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server import MCPServer
+from pydantic import Field
+
 from aircall_mcp.client import AircallClient
 
-mcp = FastMCP("aircall-mcp")
+mcp = MCPServer("aircall-mcp")
+
+PageNumber = Annotated[
+    int,
+    Field(ge=1, description="One-based Aircall API page number."),
+]
+ListLimit = Annotated[
+    int,
+    Field(
+        ge=1,
+        le=200,
+        description="Maximum number of records returned from the selected API page.",
+    ),
+]
+LegacyPageSize = Annotated[
+    int | None,
+    Field(
+        ge=1,
+        le=200,
+        deprecated=True,
+        description="Deprecated alias for limit.",
+    ),
+]
 
 
 def _client() -> AircallClient:
@@ -30,9 +55,15 @@ def get_company() -> dict:
 
 
 @mcp.tool()
-def list_numbers(page: int = 1, per_page: int = 25) -> dict:
-    """List all phone numbers configured in the Aircall account."""
-    return _client().list_numbers(page=page, per_page=per_page)
+def list_numbers(
+    page: PageNumber = 1,
+    limit: ListLimit = 25,
+    per_page: LegacyPageSize = None,
+) -> dict:
+    """List phone numbers. limit caps this page; per_page is a deprecated alias."""
+    return _client().list_numbers(
+        page=page, limit=per_page if per_page is not None else limit
+    )
 
 
 @mcp.tool()
@@ -48,16 +79,17 @@ def get_number(number_id: int) -> dict:
 
 @mcp.tool()
 def list_calls(
-    page: int = 1,
-    per_page: int = 25,
+    page: PageNumber = 1,
+    limit: ListLimit = 25,
     number_id: int = 0,
     from_ts: int = 0,
     to_ts: int = 0,
+    per_page: LegacyPageSize = None,
 ) -> dict:
-    """List calls. Optionally filter by number_id (int), from_ts and to_ts (Unix timestamps). Pass 0 to omit a filter."""
+    """List calls. limit caps this page; optionally filter by number or Unix timestamps. per_page is a deprecated alias."""
     return _client().list_calls(
         page=page,
-        per_page=per_page,
+        limit=per_page if per_page is not None else limit,
         number_id=number_id,
         from_ts=from_ts,
         to_ts=to_ts,
@@ -114,9 +146,18 @@ def get_call_summary(call_id: int) -> dict:
 
 
 @mcp.tool()
-def list_contacts(page: int = 1, per_page: int = 25, query: str = "") -> dict:
-    """List contacts. Optionally pass a search query string to filter results."""
-    return _client().list_contacts(page=page, per_page=per_page, query=query)
+def list_contacts(
+    page: PageNumber = 1,
+    limit: ListLimit = 25,
+    query: str = "",
+    per_page: LegacyPageSize = None,
+) -> dict:
+    """List contacts. limit caps this page; per_page is a deprecated alias."""
+    return _client().list_contacts(
+        page=page,
+        limit=per_page if per_page is not None else limit,
+        query=query,
+    )
 
 
 @mcp.tool()
@@ -169,9 +210,13 @@ def delete_contact(contact_id: int) -> dict:
 
 
 @mcp.tool()
-def list_users(page: int = 1, per_page: int = 25) -> dict:
-    """List all users in the Aircall account."""
-    return _client().list_users(page=page, per_page=per_page)
+def list_users(
+    page: PageNumber = 1,
+    limit: ListLimit = 25,
+    per_page: LegacyPageSize = None,
+) -> dict:
+    """List users. limit caps this page; per_page is a deprecated alias."""
+    return _client().list_users(page=page, limit=per_page if per_page else limit)
 
 
 @mcp.tool()
@@ -186,9 +231,13 @@ def get_user(user_id: int) -> dict:
 
 
 @mcp.tool()
-def list_teams(page: int = 1, per_page: int = 25) -> dict:
-    """List all teams in the Aircall account."""
-    return _client().list_teams(page=page, per_page=per_page)
+def list_teams(
+    page: PageNumber = 1,
+    limit: ListLimit = 25,
+    per_page: LegacyPageSize = None,
+) -> dict:
+    """List teams. limit caps this page; per_page is a deprecated alias."""
+    return _client().list_teams(page=page, limit=per_page if per_page else limit)
 
 
 @mcp.tool()
@@ -203,9 +252,9 @@ def get_team(team_id: int) -> dict:
 
 
 @mcp.tool()
-def list_tags() -> dict:
-    """List all call tags defined in the Aircall account."""
-    return _client().list_tags()
+def list_tags(limit: ListLimit = 25) -> dict:
+    """List call tags, capped at limit records."""
+    return _client().list_tags(limit=limit)
 
 
 @mcp.tool()
@@ -221,14 +270,14 @@ def create_tag(name: str, color: str = "") -> dict:
 
 @mcp.resource("aircall://numbers", mime_type="application/json")
 def numbers_resource() -> str:
-    """All phone numbers configured in this Aircall account — read-only reference data."""
-    return json.dumps(_client().list_numbers(per_page=100), indent=2)
+    """Up to 100 phone numbers in this Aircall account — read-only reference data."""
+    return json.dumps(_client().list_numbers(limit=100), indent=2)
 
 
 @mcp.resource("aircall://tags", mime_type="application/json")
 def tags_resource() -> str:
-    """All call tags defined in this Aircall account — read-only reference data."""
-    return json.dumps(_client().list_tags(), indent=2)
+    """Up to 200 call tags in this Aircall account — read-only reference data."""
+    return json.dumps(_client().list_tags(limit=200), indent=2)
 
 
 @mcp.resource("aircall://security-notes", mime_type="text/markdown")

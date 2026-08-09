@@ -7,12 +7,8 @@ from aircall_mcp.client import AircallClient
 def verify():
     try:
         client = AircallClient()
-        data = client.get_company()
-        company = data.get("company", data) if isinstance(data, dict) else data
-        name = "(unknown)"
-        if isinstance(company, dict):
-            name = company.get("name", name)
-        print(f"Connected successfully. Company: {name}")
+        client.get_company()
+        print("Connected successfully.")
     except (RuntimeError, ValueError) as e:
         print(f"Verification failed: {e}")
         raise SystemExit(1)
