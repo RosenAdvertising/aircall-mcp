@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 import base64
+import logging
 import os
 import sys
 import time
+
 import requests
 
 from aircall_mcp import credentials
 
 BASE_URL = "https://api.aircall.io/v1"
-
-# Resolve credentials through the pluggable store (OS keyring -> .env file).
-credentials.load_into_environ(["AIRCALL_API_ID", "AIRCALL_API_TOKEN"])
+logger = logging.getLogger(__name__)
 
 
 def _retry_after_seconds(resp, default=10):
@@ -24,22 +24,37 @@ def _json_response(resp):
     try:
         return resp.json()
     except ValueError:
-        raise RuntimeError(
-            f"Aircall API returned non-JSON ({resp.status_code}): {resp.text[:200]}"
+        logger.warning(
+            "aircall_request_rejected reason=upstream_non_json status_code=%s",
+            resp.status_code,
         )
+        raise RuntimeError(f"Aircall API returned non-JSON ({resp.status_code})")
+
+
+def _cap_collection(response, key: str, limit: int):
+    """Defensively cap a list response even if the upstream API over-returns."""
+    if not isinstance(response, dict) or not isinstance(response.get(key), list):
+        return response
+    capped = dict(response)
+    capped[key] = response[key][:limit]
+    return capped
 
 
 class AircallClient:
     def __init__(self):
+        # Resolve only when a client is needed; importing the MCP server must not
+        # consult keyring or the fallback credential file.
+        credentials.load_into_environ(["AIRCALL_API_ID", "AIRCALL_API_TOKEN"])
         api_id = os.environ.get("AIRCALL_API_ID", "")
         api_token = os.environ.get("AIRCALL_API_TOKEN", "")
         if not api_id or not api_token:
+            logger.warning("aircall_request_rejected reason=credentials_missing")
             raise RuntimeError("Aircall credentials not found. Run: aircall-mcp-setup")
-        credentials = base64.b64encode(f"{api_id}:{api_token}".encode()).decode()
+        basic_auth = base64.b64encode(f"{api_id}:{api_token}".encode()).decode()
         self.session = requests.Session()
         self.session.headers.update(
             {
-                "Authorization": f"Basic {credentials}",
+                "Authorization": f"Basic {basic_auth}",
                 "Content-Type": "application/json",
                 "Accept": "application/json",
             }
@@ -49,6 +64,9 @@ class AircallClient:
         url = f"{BASE_URL}/{path.lstrip('/')}"
         resp = self.session.request(method, url, params=params, json=json_body)
         if resp.status_code == 401:
+            logger.warning(
+                "aircall_request_rejected reason=upstream_unauthorized status_code=401"
+            )
             raise RuntimeError("Aircall credentials invalid. Run: aircall-mcp-setup")
         if resp.status_code == 429 and _rate_retries < 3:
             wait = _retry_after_seconds(resp)
@@ -64,9 +82,11 @@ class AircallClient:
         if resp.status_code == 204:
             return {"success": True}
         if not resp.ok:
-            raise RuntimeError(
-                f"Aircall API error {resp.status_code}: {resp.text[:400]}"
+            logger.warning(
+                "aircall_request_rejected reason=upstream_error status_code=%s",
+                resp.status_code,
             )
+            raise RuntimeError(f"Aircall API error {resp.status_code}")
         return _json_response(resp)
 
     def get(self, path, params=None):
@@ -93,9 +113,10 @@ class AircallClient:
     # Numbers
     # -------------------------------------------------------------------------
 
-    def list_numbers(self, page=1, per_page=25):
-        """List all phone numbers in the account."""
-        return self.get("/numbers", params={"page": page, "per_page": per_page})
+    def list_numbers(self, page=1, limit=25):
+        """List one page of phone numbers, capped at limit records."""
+        response = self.get("/numbers", params={"page": page, "per_page": limit})
+        return _cap_collection(response, "numbers", limit)
 
     def get_number(self, number_id):
         """Get a specific phone number by ID."""
@@ -105,16 +126,17 @@ class AircallClient:
     # Calls
     # -------------------------------------------------------------------------
 
-    def list_calls(self, page=1, per_page=25, number_id=0, from_ts=0, to_ts=0):
+    def list_calls(self, page=1, limit=25, number_id=0, from_ts=0, to_ts=0):
         """List calls. Filters number_id, from, to are only sent if non-zero."""
-        params = {"page": page, "per_page": per_page}
+        params = {"page": page, "per_page": limit}
         if number_id:
             params["number_id"] = number_id
         if from_ts:
             params["from"] = from_ts
         if to_ts:
             params["to"] = to_ts
-        return self.get("/calls", params=params)
+        response = self.get("/calls", params=params)
+        return _cap_collection(response, "calls", limit)
 
     def get_call(self, call_id):
         """Get a specific call by ID."""
@@ -140,6 +162,7 @@ class AircallClient:
     def tag_call(self, call_id, tag_ids):
         """Tag a call with a list of tag IDs."""
         if not isinstance(tag_ids, list):
+            logger.warning("aircall_request_rejected reason=tag_ids_not_list")
             raise ValueError("tag_ids must be a list of tag IDs")
         return self.post(f"/calls/{call_id}/tags", body={"tag_ids": tag_ids})
 
@@ -155,12 +178,13 @@ class AircallClient:
     # Contacts
     # -------------------------------------------------------------------------
 
-    def list_contacts(self, page=1, per_page=25, query=""):
+    def list_contacts(self, page=1, limit=25, query=""):
         """List contacts. Sends search param only if query is non-empty."""
-        params: dict[str, int | str] = {"page": page, "per_page": per_page}
+        params: dict[str, int | str] = {"page": page, "per_page": limit}
         if query:
             params["search"] = query
-        return self.get("/contacts", params=params)
+        response = self.get("/contacts", params=params)
+        return _cap_collection(response, "contacts", limit)
 
     def get_contact(self, contact_id):
         """Get a specific contact by ID."""
@@ -179,10 +203,12 @@ class AircallClient:
             body["last_name"] = last_name
         if phone_numbers:
             if not isinstance(phone_numbers, list):
+                logger.warning("aircall_request_rejected reason=phone_numbers_not_list")
                 raise ValueError("phone_numbers must be a list")
             body["phone_numbers"] = phone_numbers
         if emails:
             if not isinstance(emails, list):
+                logger.warning("aircall_request_rejected reason=emails_not_list")
                 raise ValueError("emails must be a list")
             body["emails"] = emails
         return self.post("/contacts", body=body)
@@ -202,6 +228,7 @@ class AircallClient:
             body["last_name"] = last_name
         if phone_numbers:
             if not isinstance(phone_numbers, list):
+                logger.warning("aircall_request_rejected reason=phone_numbers_not_list")
                 raise ValueError("phone_numbers must be a list")
             body["phone_numbers"] = phone_numbers
         return self.patch(f"/contacts/{contact_id}", body=body)
@@ -214,9 +241,10 @@ class AircallClient:
     # Users
     # -------------------------------------------------------------------------
 
-    def list_users(self, page=1, per_page=25):
-        """List all users in the account."""
-        return self.get("/users", params={"page": page, "per_page": per_page})
+    def list_users(self, page=1, limit=25):
+        """List one page of users, capped at limit records."""
+        response = self.get("/users", params={"page": page, "per_page": limit})
+        return _cap_collection(response, "users", limit)
 
     def get_user(self, user_id):
         """Get a specific user by ID."""
@@ -226,9 +254,10 @@ class AircallClient:
     # Teams
     # -------------------------------------------------------------------------
 
-    def list_teams(self, page=1, per_page=25):
-        """List all teams in the account."""
-        return self.get("/teams", params={"page": page, "per_page": per_page})
+    def list_teams(self, page=1, limit=25):
+        """List one page of teams, capped at limit records."""
+        response = self.get("/teams", params={"page": page, "per_page": limit})
+        return _cap_collection(response, "teams", limit)
 
     def get_team(self, team_id):
         """Get a specific team by ID."""
@@ -238,9 +267,10 @@ class AircallClient:
     # Tags
     # -------------------------------------------------------------------------
 
-    def list_tags(self):
-        """List all tags in the account."""
-        return self.get("/tags")
+    def list_tags(self, limit=25):
+        """List tags, capped locally at limit records."""
+        response = self.get("/tags")
+        return _cap_collection(response, "tags", limit)
 
     def create_tag(self, name, color=""):
         """Create a tag. color is only included if non-empty."""
