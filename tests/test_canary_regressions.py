@@ -7,7 +7,11 @@ import logging
 from typing import Any, cast
 
 import pytest
-from mcp.server.mcpserver.exceptions import ToolError
+
+try:
+    from mcp.server.mcpserver.exceptions import ToolError
+except ImportError:
+    from mcp.server.fastmcp.exceptions import ToolError
 
 from aircall_mcp import server
 from aircall_mcp.client import AircallClient, _json_response
@@ -80,7 +84,7 @@ def _bare_client(response: FakeResponse) -> AircallClient:
 
 def _tool_schemas() -> dict[str, dict[str, Any]]:
     return {
-        tool.name: tool.input_schema
+        tool.name: getattr(tool, "input_schema", None) or tool.inputSchema
         for tool in asyncio.run(server.mcp.list_tools())
         if tool.name in LIST_TOOLS
     }
