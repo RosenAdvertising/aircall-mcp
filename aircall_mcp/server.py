@@ -4,15 +4,10 @@
 import json
 from typing import Annotated
 
+from mcp.server import MCPServer
 from pydantic import Field
 
 from aircall_mcp.client import AircallClient
-
-try:
-    from mcp.server import MCPServer
-except ImportError:
-    # The main branch requires MCP 1.x, which exposes FastMCP instead.
-    from mcp.server.fastmcp import FastMCP as MCPServer
 
 mcp = MCPServer("aircall-mcp")
 

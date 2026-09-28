@@ -120,5 +120,6 @@ Add to `claude_desktop_config.json`:
 ## Auth
 
 HTTP Basic Auth using `AIRCALL_API_ID:AIRCALL_API_TOKEN`, base64-encoded.
-Credentials are resolved at import time through the pluggable store described in
-[Credential storage](#credential-storage) (OS keyring first, `.env` file fallback).
+Credentials are resolved when a client is needed through the pluggable store
+described in [Credential storage](#credential-storage) (OS keyring first,
+`.env` file fallback).
