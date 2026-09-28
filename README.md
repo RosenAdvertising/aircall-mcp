@@ -16,6 +16,7 @@ MCP server for Aircall — calls, contacts, transcripts, numbers, and team manag
 ## Requirements
 
 - Python 3.10+
+- Python MCP SDK `>=2.2,<3` (protocol revision: 2026-07-28)
 - Aircall account with API access
 
 ## Installation
