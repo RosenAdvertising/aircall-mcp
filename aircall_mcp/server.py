@@ -6,7 +6,6 @@ import logging
 from typing import Annotated
 
 from mcp.server import MCPServer
-from mcp.server.mcpserver.context import Context
 from mcp.server.mcpserver.exceptions import (
     ResourceError,
     ToolError,
@@ -36,19 +35,12 @@ logger = logging.getLogger(__name__)
 class SafeMCPServer(MCPServer):
     """Keep SDK registrations while sanitizing anticipated and unexpected errors."""
 
-    async def _handle_call_tool(self, ctx, params):
-        context = Context(
-            request_context=ctx,
-            mcp_server=self,
-            input_params=params,
-            subscriptions=self._subscriptions,
-        )
+    async def call_tool(self, name, arguments, context=None):
         try:
-            return await self.call_tool(params.name, params.arguments or {}, context)
+            return await super().call_tool(name, arguments, context)
         except MCPError:
             raise
         except Exception as exc:
-            name = params.name
             failure = (
                 exc.__cause__
                 if isinstance(exc, ToolError)

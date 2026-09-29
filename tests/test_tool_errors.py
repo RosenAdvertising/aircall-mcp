@@ -47,6 +47,16 @@ def text(result):
 
 
 @pytest.mark.asyncio
+async def test_public_call_tool_preserves_safe_errors_without_transport(monkeypatch):
+    monkeypatch.setattr(server, "_client", lambda: client_for(Response(403)))
+    result = await server.mcp.call_tool("get_company", {})
+    assert text(result) == (
+        "Error executing tool get_company: Aircall access denied: the connected account lacks permission for this action "
+        "(or the authorization expired; re-run aircall-mcp-setup if so)."
+    )
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("failure", "expected"),
     [
