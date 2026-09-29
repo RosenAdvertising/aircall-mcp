@@ -2,14 +2,138 @@
 """Aircall MCP server — calls, contacts, transcripts, numbers, and team management."""
 
 import json
+import logging
 from typing import Annotated
 
 from mcp.server import MCPServer
+from mcp.server.mcpserver.context import Context
+from mcp.server.mcpserver.exceptions import ToolError, UnexpectedToolError
+from mcp.shared.exceptions import MCPError
+from mcp_types import CallToolResult, TextContent
+from pydantic import ValidationError
 from pydantic import Field
 
 from aircall_mcp.client import AircallClient
+from aircall_mcp.errors import (
+    ArgumentShapeError,
+    AuthorizationError,
+    MissingCredentialsError,
+    NotFoundError,
+    RateLimitedError,
+    VendorHTTPError,
+    TransportError,
+)
 
-mcp = MCPServer("aircall-mcp")
+logger = logging.getLogger(__name__)
+
+
+class SafeMCPServer(MCPServer):
+    """Keep SDK registrations while sanitizing anticipated and unexpected errors."""
+
+    async def _handle_call_tool(self, ctx, params):
+        context = Context(
+            request_context=ctx,
+            mcp_server=self,
+            input_params=params,
+            subscriptions=self._subscriptions,
+        )
+        try:
+            return await self.call_tool(params.name, params.arguments or {}, context)
+        except MCPError:
+            raise
+        except Exception as exc:
+            name = params.name
+            failure = (
+                exc.__cause__
+                if isinstance(exc, ToolError)
+                and not isinstance(exc, UnexpectedToolError)
+                else None
+            )
+            if isinstance(failure, ValidationError):
+                text = _safe_validation_text(self, name, failure)
+                logger.info("tool_failed reason=invalid_arguments")
+            elif isinstance(failure, MissingCredentialsError):
+                text = (
+                    f"Error executing tool {name}: Aircall credentials are missing. "
+                    "Set AIRCALL_API_ID and AIRCALL_API_TOKEN or run aircall-mcp-setup."
+                )
+                logger.info("tool_failed reason=credentials_missing")
+            elif isinstance(failure, AuthorizationError):
+                text = (
+                    f"Error executing tool {name}: Aircall authorization was rejected or expired. "
+                    "Reauthorize with aircall-mcp-setup."
+                )
+                logger.info("tool_failed reason=authorization_required")
+            elif isinstance(failure, RateLimitedError):
+                text = f"Error executing tool {name}: {failure}"
+                logger.info("tool_failed reason=rate_limited")
+            elif isinstance(failure, TransportError):
+                text = f"Error executing tool {name}: {failure}"
+                logger.info("tool_failed reason=transport_failure")
+            elif isinstance(failure, NotFoundError):
+                text = f"Error executing tool {name}: The requested Aircall resource was not found."
+                logger.info("tool_failed reason=not_found")
+            elif isinstance(failure, VendorHTTPError):
+                text = (
+                    f"Error executing tool {name}: Aircall returned HTTP {failure.status_code}: "
+                    f"{failure.reason}."
+                )
+                logger.info("tool_failed reason=upstream_rejected")
+            elif isinstance(failure, ArgumentShapeError):
+                text = (
+                    f"Error executing tool {name}: Argument {failure.argument} must be "
+                    f"{failure.expected}."
+                )
+                logger.info("tool_failed reason=invalid_arguments")
+            else:
+                # Never include exception text, cause text, or traceback in logs/results.
+                text = f"Error executing tool {name}"
+                logger.error("tool_failed reason=unexpected")
+            return CallToolResult(
+                content=[TextContent(type="text", text=text)], is_error=True
+            )
+
+
+def _safe_validation_text(
+    server: SafeMCPServer, name: str, error: ValidationError
+) -> str:
+    tool = server._tool_manager.get_tool(name)
+    props = tool.parameters.get("properties", {}) if tool else {}
+    parts = []
+    for item in error.errors():
+        location = item.get("loc", ())
+        candidate = str(location[0]) if location else "arguments"
+        field = (
+            candidate if isinstance(props, dict) and candidate in props else "arguments"
+        )
+        schema = props.get(field, {}) if isinstance(props, dict) else {}
+        shape = _expected_shape(schema)
+        parts.append(f"{field} expected {shape}")
+    details = (
+        "; ".join(dict.fromkeys(parts)) or "arguments did not match the tool schema"
+    )
+    return f"Error executing tool {name}: Invalid arguments: {details}."
+
+
+def _expected_shape(schema: dict) -> str:
+    if "anyOf" in schema:
+        return " or ".join(_expected_shape(option) for option in schema["anyOf"])
+    kind = str(schema.get("type", ""))
+    if kind == "integer" and "minimum" in schema and "maximum" in schema:
+        return f"an integer from {schema['minimum']} to {schema['maximum']}"
+    if kind == "integer" and "minimum" in schema:
+        return f"an integer of at least {schema['minimum']}"
+    return {
+        "integer": "an integer",
+        "string": "a string",
+        "array": "an array",
+        "object": "an object",
+        "boolean": "a boolean",
+        "null": "null",
+    }.get(kind, "the documented argument shape")
+
+
+mcp = SafeMCPServer("aircall-mcp")
 
 PageNumber = Annotated[
     int,

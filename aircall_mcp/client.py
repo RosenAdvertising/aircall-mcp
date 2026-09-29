@@ -2,22 +2,59 @@
 import base64
 import logging
 import os
-import sys
-import time
 
 import requests
 
 from aircall_mcp import credentials
+from aircall_mcp.errors import (
+    ArgumentShapeError,
+    AuthorizationError,
+    MissingCredentialsError,
+    NotFoundError,
+    RateLimitedError,
+    VendorHTTPError,
+    TransportError,
+)
 
 BASE_URL = "https://api.aircall.io/v1"
 logger = logging.getLogger(__name__)
 
+_SAFE_VENDOR_REASONS = {
+    "invalid_request": "invalid request",
+    "invalid_credentials": "invalid credentials",
+    "insufficient_permissions": "insufficient permissions",
+    "not_found": "resource not found",
+    "service_unavailable": "service unavailable",
+    "internal_error": "internal server error",
+}
 
-def _retry_after_seconds(resp, default=10):
+
+def _safe_vendor_reason(resp) -> str:
+    """Accept only generic allowlisted codes; never surface vendor prose."""
     try:
-        return int(resp.headers.get("Retry-After", default))
+        payload = resp.json()
+    except ValueError:
+        return "request rejected"
+    if isinstance(payload, dict):
+        code = payload.get("code")
+        if isinstance(code, str):
+            return _SAFE_VENDOR_REASONS.get(code.lower(), "request rejected")
+        errors = payload.get("errors")
+        if isinstance(errors, list):
+            for item in errors:
+                if isinstance(item, dict) and isinstance(item.get("code"), str):
+                    safe = _SAFE_VENDOR_REASONS.get(item["code"].lower())
+                    if safe:
+                        return safe
+    return "request rejected"
+
+
+def _retry_after_seconds(resp):
+    try:
+        delay = int(resp.headers.get("Retry-After", ""))
     except (TypeError, ValueError):
-        return default
+        return None
+    return delay if 0 <= delay <= 86400 else None
 
 
 def _json_response(resp):
@@ -28,7 +65,7 @@ def _json_response(resp):
             "aircall_request_rejected reason=upstream_non_json status_code=%s",
             resp.status_code,
         )
-        raise RuntimeError(f"Aircall API returned non-JSON ({resp.status_code})")
+        raise VendorHTTPError(resp.status_code, "invalid JSON response")
 
 
 def _cap_collection(response, key: str, limit: int):
@@ -49,7 +86,7 @@ class AircallClient:
         api_token = os.environ.get("AIRCALL_API_TOKEN", "")
         if not api_id or not api_token:
             logger.warning("aircall_request_rejected reason=credentials_missing")
-            raise RuntimeError("Aircall credentials not found. Run: aircall-mcp-setup")
+            raise MissingCredentialsError()
         basic_auth = base64.b64encode(f"{api_id}:{api_token}".encode()).decode()
         self.session = requests.Session()
         self.session.headers.update(
@@ -62,23 +99,16 @@ class AircallClient:
 
     def _request(self, method, path, params=None, json_body=None, _rate_retries=0):
         url = f"{BASE_URL}/{path.lstrip('/')}"
-        resp = self.session.request(method, url, params=params, json=json_body)
-        if resp.status_code == 401:
-            logger.warning(
-                "aircall_request_rejected reason=upstream_unauthorized status_code=401"
-            )
-            raise RuntimeError("Aircall credentials invalid. Run: aircall-mcp-setup")
-        if resp.status_code == 429 and _rate_retries < 3:
+        try:
+            resp = self.session.request(method, url, params=params, json=json_body)
+        except requests.RequestException:
+            raise TransportError() from None
+        if resp.status_code in (401, 403):
+            logger.warning("aircall_request_rejected reason=upstream_unauthorized")
+            raise AuthorizationError()
+        if resp.status_code == 429:
             wait = _retry_after_seconds(resp)
-            print(f"Rate limited. Waiting {wait}s...", file=sys.stderr)
-            time.sleep(wait)
-            return self._request(
-                method,
-                path,
-                params=params,
-                json_body=json_body,
-                _rate_retries=_rate_retries + 1,
-            )
+            raise RateLimitedError(wait)
         if resp.status_code == 204:
             return {"success": True}
         if not resp.ok:
@@ -86,7 +116,9 @@ class AircallClient:
                 "aircall_request_rejected reason=upstream_error status_code=%s",
                 resp.status_code,
             )
-            raise RuntimeError(f"Aircall API error {resp.status_code}")
+            if resp.status_code == 404:
+                raise NotFoundError()
+            raise VendorHTTPError(resp.status_code, _safe_vendor_reason(resp))
         return _json_response(resp)
 
     def get(self, path, params=None):
@@ -163,7 +195,7 @@ class AircallClient:
         """Tag a call with a list of tag IDs."""
         if not isinstance(tag_ids, list):
             logger.warning("aircall_request_rejected reason=tag_ids_not_list")
-            raise ValueError("tag_ids must be a list of tag IDs")
+            raise ArgumentShapeError("tag_ids", "an array of tag IDs")
         return self.post(f"/calls/{call_id}/tags", body={"tag_ids": tag_ids})
 
     def get_call_transcript(self, call_id):
@@ -204,12 +236,14 @@ class AircallClient:
         if phone_numbers:
             if not isinstance(phone_numbers, list):
                 logger.warning("aircall_request_rejected reason=phone_numbers_not_list")
-                raise ValueError("phone_numbers must be a list")
+                raise ArgumentShapeError(
+                    "phone_numbers", "an array of phone number objects"
+                )
             body["phone_numbers"] = phone_numbers
         if emails:
             if not isinstance(emails, list):
                 logger.warning("aircall_request_rejected reason=emails_not_list")
-                raise ValueError("emails must be a list")
+                raise ArgumentShapeError("emails", "an array of email objects")
             body["emails"] = emails
         return self.post("/contacts", body=body)
 
@@ -229,7 +263,9 @@ class AircallClient:
         if phone_numbers:
             if not isinstance(phone_numbers, list):
                 logger.warning("aircall_request_rejected reason=phone_numbers_not_list")
-                raise ValueError("phone_numbers must be a list")
+                raise ArgumentShapeError(
+                    "phone_numbers", "an array of phone number objects"
+                )
             body["phone_numbers"] = phone_numbers
         return self.patch(f"/contacts/{contact_id}", body=body)
 
