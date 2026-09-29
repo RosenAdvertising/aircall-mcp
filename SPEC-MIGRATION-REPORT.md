@@ -39,10 +39,9 @@ uv lock --check --offline
 These commands check local protocol and application behavior. They do not
 establish live Aircall compatibility or deployed runtime behavior.
 
-## Open product decision
+## Tool error behavior
 
-MCP 2.2.0 masks client-visible messages from tool exceptions other than
-`ToolError` or `ResourceError`. Retaining that masking limits leakage;
-raising explicitly safe `ToolError` messages could give clients more actionable
-feedback. Toby should choose the desired policy. This migration leaves
-existing tool exception handling unchanged.
+Expected tool failures use typed `ToolError` subclasses with fixed, sanitized
+messages. The MCP server returns these messages with `isError: true`; unexpected
+exceptions are masked with a generic message. Vendor response prose, credentials,
+arguments, and raw exception text are not included in client-facing errors.

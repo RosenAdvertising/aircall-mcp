@@ -7,7 +7,11 @@ from typing import Annotated
 
 from mcp.server import MCPServer
 from mcp.server.mcpserver.context import Context
-from mcp.server.mcpserver.exceptions import ToolError, UnexpectedToolError
+from mcp.server.mcpserver.exceptions import (
+    ResourceError,
+    ToolError,
+    UnexpectedToolError,
+)
 from mcp.shared.exceptions import MCPError
 from mcp_types import CallToolResult, TextContent
 from pydantic import ValidationError
@@ -16,12 +20,14 @@ from pydantic import Field
 from aircall_mcp.client import AircallClient
 from aircall_mcp.errors import (
     ArgumentShapeError,
+    AuthenticationError,
     AuthorizationError,
     MissingCredentialsError,
     NotFoundError,
     RateLimitedError,
     VendorHTTPError,
     TransportError,
+    ReadTransportError,
 )
 
 logger = logging.getLogger(__name__)
@@ -60,16 +66,22 @@ class SafeMCPServer(MCPServer):
                 logger.info("tool_failed reason=credentials_missing")
             elif isinstance(failure, AuthorizationError):
                 text = (
-                    f"Error executing tool {name}: Aircall authorization was rejected or expired. "
-                    "Reauthorize with aircall-mcp-setup."
+                    f"Error executing tool {name}: Aircall access denied: the connected account lacks permission for this action "
+                    "(or the authorization expired; re-run aircall-mcp-setup if so)."
                 )
-                logger.info("tool_failed reason=authorization_required")
+                logger.info("tool_failed reason=access_denied")
+            elif isinstance(failure, AuthenticationError):
+                text = f"Error executing tool {name}: Aircall authentication failed. Re-run aircall-mcp-setup to refresh the authorization."
+                logger.info("tool_failed reason=authentication_required")
             elif isinstance(failure, RateLimitedError):
                 text = f"Error executing tool {name}: {failure}"
                 logger.info("tool_failed reason=rate_limited")
             elif isinstance(failure, TransportError):
                 text = f"Error executing tool {name}: {failure}"
                 logger.info("tool_failed reason=transport_failure")
+            elif isinstance(failure, ReadTransportError):
+                text = f"Error executing tool {name}: {failure}"
+                logger.info("tool_failed reason=read_transport_failure")
             elif isinstance(failure, NotFoundError):
                 text = f"Error executing tool {name}: The requested Aircall resource was not found."
                 logger.info("tool_failed reason=not_found")
@@ -395,13 +407,45 @@ def create_tag(name: str, color: str = "") -> dict:
 @mcp.resource("aircall://numbers", mime_type="application/json")
 def numbers_resource() -> str:
     """Up to 100 phone numbers in this Aircall account — read-only reference data."""
-    return json.dumps(_client().list_numbers(limit=100), indent=2)
+    try:
+        return json.dumps(_client().list_numbers(limit=100), indent=2)
+    except (
+        MissingCredentialsError,
+        AuthorizationError,
+        AuthenticationError,
+        RateLimitedError,
+        TransportError,
+        ReadTransportError,
+        NotFoundError,
+        VendorHTTPError,
+    ) as exc:
+        raise ResourceError(str(exc)) from None
+    except Exception:
+        raise ResourceError(
+            "Unable to read this Aircall resource. Try again or check the connection."
+        ) from None
 
 
 @mcp.resource("aircall://tags", mime_type="application/json")
 def tags_resource() -> str:
     """Up to 200 call tags in this Aircall account — read-only reference data."""
-    return json.dumps(_client().list_tags(limit=200), indent=2)
+    try:
+        return json.dumps(_client().list_tags(limit=200), indent=2)
+    except (
+        MissingCredentialsError,
+        AuthorizationError,
+        AuthenticationError,
+        RateLimitedError,
+        TransportError,
+        ReadTransportError,
+        NotFoundError,
+        VendorHTTPError,
+    ) as exc:
+        raise ResourceError(str(exc)) from None
+    except Exception:
+        raise ResourceError(
+            "Unable to read this Aircall resource. Try again or check the connection."
+        ) from None
 
 
 @mcp.resource("aircall://security-notes", mime_type="text/markdown")

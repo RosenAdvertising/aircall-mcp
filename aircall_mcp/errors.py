@@ -18,8 +18,15 @@ class MissingCredentialsError(AircallFailure):
 class AuthorizationError(AircallFailure):
     def __init__(self):
         super().__init__(
-            "Aircall authorization was rejected or expired. "
-            "Reauthorize with aircall-mcp-setup."
+            "Aircall access denied: the connected account lacks permission for this action "
+            "(or the authorization expired; re-run aircall-mcp-setup if so)."
+        )
+
+
+class AuthenticationError(AircallFailure):
+    def __init__(self):
+        super().__init__(
+            "Aircall authentication failed. Re-run aircall-mcp-setup to refresh the authorization."
         )
 
 
@@ -56,5 +63,12 @@ class ArgumentShapeError(AircallFailure, ValueError):
 class TransportError(AircallFailure):
     def __init__(self):
         super().__init__(
-            "Aircall request did not complete. Check the result in Aircall before retrying."
+            "Aircall request outcome is unknown. Check whether the operation completed before retrying."
+        )
+
+
+class ReadTransportError(AircallFailure):
+    def __init__(self):
+        super().__init__(
+            "Aircall read request did not complete. You may retry the read."
         )

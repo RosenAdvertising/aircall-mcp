@@ -2,18 +2,21 @@
 import base64
 import logging
 import os
+from urllib.parse import quote
 
 import requests
 
 from aircall_mcp import credentials
 from aircall_mcp.errors import (
     ArgumentShapeError,
+    AuthenticationError,
     AuthorizationError,
     MissingCredentialsError,
     NotFoundError,
     RateLimitedError,
     VendorHTTPError,
     TransportError,
+    ReadTransportError,
 )
 
 BASE_URL = "https://api.aircall.io/v1"
@@ -54,7 +57,7 @@ def _retry_after_seconds(resp):
         delay = int(resp.headers.get("Retry-After", ""))
     except (TypeError, ValueError):
         return None
-    return delay if 0 <= delay <= 86400 else None
+    return delay if delay >= 0 else None
 
 
 def _json_response(resp):
@@ -100,11 +103,18 @@ class AircallClient:
     def _request(self, method, path, params=None, json_body=None, _rate_retries=0):
         url = f"{BASE_URL}/{path.lstrip('/')}"
         try:
-            resp = self.session.request(method, url, params=params, json=json_body)
+            resp = self.session.request(
+                method, url, params=params, json=json_body, timeout=30
+            )
         except requests.RequestException:
+            if method.upper() == "GET":
+                raise ReadTransportError() from None
             raise TransportError() from None
-        if resp.status_code in (401, 403):
+        if resp.status_code == 401:
             logger.warning("aircall_request_rejected reason=upstream_unauthorized")
+            raise AuthenticationError()
+        if resp.status_code == 403:
+            logger.warning("aircall_request_rejected reason=upstream_forbidden")
             raise AuthorizationError()
         if resp.status_code == 429:
             wait = _retry_after_seconds(resp)
@@ -152,7 +162,7 @@ class AircallClient:
 
     def get_number(self, number_id):
         """Get a specific phone number by ID."""
-        return self.get(f"/numbers/{number_id}")
+        return self.get(f"/numbers/{quote(str(number_id), safe='')}")
 
     # -------------------------------------------------------------------------
     # Calls
@@ -172,7 +182,7 @@ class AircallClient:
 
     def get_call(self, call_id):
         """Get a specific call by ID."""
-        return self.get(f"/calls/{call_id}")
+        return self.get(f"/calls/{quote(str(call_id), safe='')}")
 
     def initiate_call(self, number_id, to):
         """Initiate an outbound call from a number to a destination."""
@@ -185,26 +195,30 @@ class AircallClient:
             body["user_id"] = user_id
         if number_id:
             body["number_id"] = number_id
-        return self.post(f"/calls/{call_id}/transfers", body=body)
+        return self.post(f"/calls/{quote(str(call_id), safe='')}/transfers", body=body)
 
     def add_call_comment(self, call_id, content):
         """Add a comment to a call."""
-        return self.post(f"/calls/{call_id}/comments", body={"content": content})
+        return self.post(
+            f"/calls/{quote(str(call_id), safe='')}/comments", body={"content": content}
+        )
 
     def tag_call(self, call_id, tag_ids):
         """Tag a call with a list of tag IDs."""
         if not isinstance(tag_ids, list):
             logger.warning("aircall_request_rejected reason=tag_ids_not_list")
             raise ArgumentShapeError("tag_ids", "an array of tag IDs")
-        return self.post(f"/calls/{call_id}/tags", body={"tag_ids": tag_ids})
+        return self.post(
+            f"/calls/{quote(str(call_id), safe='')}/tags", body={"tag_ids": tag_ids}
+        )
 
     def get_call_transcript(self, call_id):
         """Get the transcript for a call. Requires Aircall AI add-on."""
-        return self.get(f"/calls/{call_id}/transcript")
+        return self.get(f"/calls/{quote(str(call_id), safe='')}/transcript")
 
     def get_call_summary(self, call_id):
         """Get the AI-generated summary for a call."""
-        return self.get(f"/calls/{call_id}/summary")
+        return self.get(f"/calls/{quote(str(call_id), safe='')}/summary")
 
     # -------------------------------------------------------------------------
     # Contacts
@@ -220,7 +234,7 @@ class AircallClient:
 
     def get_contact(self, contact_id):
         """Get a specific contact by ID."""
-        return self.get(f"/contacts/{contact_id}")
+        return self.get(f"/contacts/{quote(str(contact_id), safe='')}")
 
     def create_contact(
         self,
@@ -267,11 +281,11 @@ class AircallClient:
                     "phone_numbers", "an array of phone number objects"
                 )
             body["phone_numbers"] = phone_numbers
-        return self.patch(f"/contacts/{contact_id}", body=body)
+        return self.patch(f"/contacts/{quote(str(contact_id), safe='')}", body=body)
 
     def delete_contact(self, contact_id):
         """Delete a contact by ID."""
-        return self.delete(f"/contacts/{contact_id}")
+        return self.delete(f"/contacts/{quote(str(contact_id), safe='')}")
 
     # -------------------------------------------------------------------------
     # Users
@@ -284,7 +298,7 @@ class AircallClient:
 
     def get_user(self, user_id):
         """Get a specific user by ID."""
-        return self.get(f"/users/{user_id}")
+        return self.get(f"/users/{quote(str(user_id), safe='')}")
 
     # -------------------------------------------------------------------------
     # Teams
@@ -297,7 +311,7 @@ class AircallClient:
 
     def get_team(self, team_id):
         """Get a specific team by ID."""
-        return self.get(f"/teams/{team_id}")
+        return self.get(f"/teams/{quote(str(team_id), safe='')}")
 
     # -------------------------------------------------------------------------
     # Tags

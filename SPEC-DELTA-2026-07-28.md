@@ -19,5 +19,5 @@ and [Python SDK migration guide](https://py.sdk.modelcontextprotocol.io/migratio
 
 The repository's tests cover local MCP discovery, results, schemas, routing,
 version errors, and legacy negotiation. They use fake Aircall responses and do
-not verify live vendor behavior. Reproducible commands and the exception-message
-product decision are in [the migration report](SPEC-MIGRATION-REPORT.md).
+not verify live vendor behavior. Reproducible commands and safe tool error
+behavior are described in [the migration report](SPEC-MIGRATION-REPORT.md).
