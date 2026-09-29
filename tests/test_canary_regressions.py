@@ -7,6 +7,7 @@ import logging
 from typing import Any, cast
 
 import pytest
+from mcp.server.mcpserver.context import Context
 from mcp.server.mcpserver.exceptions import ToolError
 
 from aircall_mcp import server
@@ -118,7 +119,7 @@ async def test_list_tools_reject_invalid_pagination(
     tool = server.mcp._tool_manager.get_tool(tool_name)
     assert tool is not None
     with pytest.raises(ToolError, match="validation error"):
-        await tool.run(arguments, None)
+        await tool.run(arguments, Context(mcp_server=server.mcp))
 
 
 @pytest.mark.parametrize("method_name", LIST_TOOLS)

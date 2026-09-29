@@ -28,6 +28,8 @@ aircall-mcp-setup = "aircall_mcp.setup.setup:main"
 aircall-mcp-verify = "aircall_mcp.setup.verify:main"
 
 [tool.pyright]
+venvPath = "."
+venv = ".venv"
 include = ["."]
 exclude = ["**/node_modules", "**/__pycache__", ".venv", "venv", "dist", "build"]
 typeCheckingMode = "basic"
