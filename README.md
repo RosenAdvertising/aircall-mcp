@@ -53,6 +53,9 @@ disk in clear text.
 without Secret Service), or if you set `AIRCALL_MCP_USE_KEYRING=0`, credentials
 fall back to a `~/.aircall-mcp/.env` file with `0600` permissions.
 
+On Windows, the OS credential store is used; the file fallback is not supported
+because private secret-file writes require `os.fchmod`.
+
 **Read order.** Credentials resolve in the order OS keyring → process environment
 → `.env` file. So a rotated secret in the keyring always wins, and an
 `AIRCALL_API_ID` / `AIRCALL_API_TOKEN` exported in your shell overrides the file
