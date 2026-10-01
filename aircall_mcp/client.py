@@ -297,6 +297,8 @@ class AircallClient:
                     "phone_numbers", "an array of phone number objects"
                 )
             body["phone_numbers"] = phone_numbers
+        if not body:
+            raise ArgumentShapeError("contact update", "a non-empty object")
         return self.patch(f"/contacts/{_path_id(contact_id, 'contact_id')}", body=body)
 
     def delete_contact(self, contact_id):

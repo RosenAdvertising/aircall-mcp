@@ -21,7 +21,7 @@ CASES = [
     ("get_call_transcript", "call_id", {"call_id": 123}),
     ("get_call_summary", "call_id", {"call_id": 123}),
     ("get_contact", "contact_id", {"contact_id": 123}),
-    ("update_contact", "contact_id", {"contact_id": 123}),
+    ("update_contact", "contact_id", {"contact_id": 123, "first_name": "probe"}),
     ("delete_contact", "contact_id", {"contact_id": 123}),
     ("get_user", "user_id", {"user_id": 123}),
     ("get_team", "team_id", {"team_id": 123}),

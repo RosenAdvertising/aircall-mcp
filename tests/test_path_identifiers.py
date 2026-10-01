@@ -59,6 +59,8 @@ def client_and_arguments(method):
         kwargs["tag_ids"] = [1]
     if method == "update_contact" and AircallClient.__name__ == "CloudTalkClient":
         kwargs["name"] = "probe"
+    if method == "update_contact":
+        kwargs["first_name"] = "probe"
     return client, kwargs, request, send
 
 
