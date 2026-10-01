@@ -13,8 +13,7 @@ from mcp.server.mcpserver.exceptions import (
 )
 from mcp.shared.exceptions import MCPError
 from mcp_types import CallToolResult, TextContent
-from pydantic import ValidationError
-from pydantic import Field
+from pydantic import BeforeValidator, Field, ValidationError
 
 from aircall_mcp.client import AircallClient
 from aircall_mcp.errors import (
@@ -24,12 +23,23 @@ from aircall_mcp.errors import (
     MissingCredentialsError,
     NotFoundError,
     RateLimitedError,
-    VendorHTTPError,
-    TransportError,
     ReadTransportError,
+    TransportError,
+    VendorHTTPError,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _reject_boolean_path_id(value):
+    """Reject booleans before integer coercion; preserve all other SDK inputs."""
+    if isinstance(value, bool):
+        raise ValueError("Use an integer identifier, not a boolean.")
+    return value
+
+
+# A before-validator preserves the existing integer JSON schema and coercions.
+PathId = Annotated[int, BeforeValidator(_reject_boolean_path_id)]
 
 
 class SafeMCPServer(MCPServer):
@@ -195,7 +205,7 @@ def list_numbers(
 
 
 @mcp.tool()
-def get_number(number_id: int) -> dict:
+def get_number(number_id: PathId) -> dict:
     """Get details for a specific phone number by its ID."""
     return _client().get_number(number_id)
 
@@ -225,7 +235,7 @@ def list_calls(
 
 
 @mcp.tool()
-def get_call(call_id: int) -> dict:
+def get_call(call_id: PathId) -> dict:
     """Get full details for a specific call by its ID."""
     return _client().get_call(call_id)
 
@@ -237,7 +247,7 @@ def initiate_call(number_id: int, to: str) -> dict:
 
 
 @mcp.tool()
-def transfer_call(call_id: int, user_id: int = 0, number_id: int = 0) -> dict:
+def transfer_call(call_id: PathId, user_id: int = 0, number_id: int = 0) -> dict:
     """Transfer an active call to a user or number. Pass 0 for values that should not be set."""
     return _client().transfer_call(
         call_id=call_id, user_id=user_id, number_id=number_id
@@ -245,25 +255,25 @@ def transfer_call(call_id: int, user_id: int = 0, number_id: int = 0) -> dict:
 
 
 @mcp.tool()
-def add_call_comment(call_id: int, content: str) -> dict:
+def add_call_comment(call_id: PathId, content: str) -> dict:
     """Add a text comment to a call record."""
     return _client().add_call_comment(call_id=call_id, content=content)
 
 
 @mcp.tool()
-def tag_call(call_id: int, tag_ids: list) -> dict:
+def tag_call(call_id: PathId, tag_ids: list) -> dict:
     """Tag a call with one or more tag IDs."""
     return _client().tag_call(call_id=call_id, tag_ids=tag_ids)
 
 
 @mcp.tool()
-def get_call_transcript(call_id: int) -> dict:
+def get_call_transcript(call_id: PathId) -> dict:
     """Get the transcript for a call. Requires Aircall AI add-on."""
     return _client().get_call_transcript(call_id)
 
 
 @mcp.tool()
-def get_call_summary(call_id: int) -> dict:
+def get_call_summary(call_id: PathId) -> dict:
     """Get the AI-generated summary for a call."""
     return _client().get_call_summary(call_id)
 
@@ -289,7 +299,7 @@ def list_contacts(
 
 
 @mcp.tool()
-def get_contact(contact_id: int) -> dict:
+def get_contact(contact_id: PathId) -> dict:
     """Get a specific contact by its ID."""
     return _client().get_contact(contact_id)
 
@@ -312,7 +322,7 @@ def create_contact(
 
 @mcp.tool()
 def update_contact(
-    contact_id: int,
+    contact_id: PathId,
     first_name: str = "",
     last_name: str = "",
     phone_numbers: list | None = None,
@@ -327,7 +337,7 @@ def update_contact(
 
 
 @mcp.tool()
-def delete_contact(contact_id: int) -> dict:
+def delete_contact(contact_id: PathId) -> dict:
     """Delete a contact by its ID."""
     return _client().delete_contact(contact_id)
 
@@ -348,7 +358,7 @@ def list_users(
 
 
 @mcp.tool()
-def get_user(user_id: int) -> dict:
+def get_user(user_id: PathId) -> dict:
     """Get details for a specific user by their ID."""
     return _client().get_user(user_id)
 
@@ -369,7 +379,7 @@ def list_teams(
 
 
 @mcp.tool()
-def get_team(team_id: int) -> dict:
+def get_team(team_id: PathId) -> dict:
     """Get details for a specific team by its ID."""
     return _client().get_team(team_id)
 

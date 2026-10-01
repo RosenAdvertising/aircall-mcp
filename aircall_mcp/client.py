@@ -2,6 +2,7 @@
 import base64
 import logging
 import os
+import re
 from urllib.parse import quote
 
 import requests
@@ -14,9 +15,9 @@ from aircall_mcp.errors import (
     MissingCredentialsError,
     NotFoundError,
     RateLimitedError,
-    VendorHTTPError,
-    TransportError,
     ReadTransportError,
+    TransportError,
+    VendorHTTPError,
 )
 
 BASE_URL = "https://api.aircall.io/v1"
@@ -78,6 +79,21 @@ def _cap_collection(response, key: str, limit: int):
     capped = dict(response)
     capped[key] = response[key][:limit]
     return capped
+
+
+def _path_id(value, parameter: str) -> str:
+    """Validate a plain identifier before URL quoting or any HTTP request."""
+    expected = (
+        "a non-empty plain identifier (ASCII letters, digits, -, _, ., ~); not . or .."
+    )
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (str, int))
+        or str(value) in {".", ".."}
+        or re.fullmatch(r"[A-Za-z0-9._~-]+", str(value)) is None
+    ):
+        raise ArgumentShapeError(parameter, expected)
+    return quote(str(value), safe="")
 
 
 class AircallClient:
@@ -162,7 +178,7 @@ class AircallClient:
 
     def get_number(self, number_id):
         """Get a specific phone number by ID."""
-        return self.get(f"/numbers/{quote(str(number_id), safe='')}")
+        return self.get(f"/numbers/{_path_id(number_id, 'number_id')}")
 
     # -------------------------------------------------------------------------
     # Calls
@@ -182,7 +198,7 @@ class AircallClient:
 
     def get_call(self, call_id):
         """Get a specific call by ID."""
-        return self.get(f"/calls/{quote(str(call_id), safe='')}")
+        return self.get(f"/calls/{_path_id(call_id, 'call_id')}")
 
     def initiate_call(self, number_id, to):
         """Initiate an outbound call from a number to a destination."""
@@ -195,12 +211,12 @@ class AircallClient:
             body["user_id"] = user_id
         if number_id:
             body["number_id"] = number_id
-        return self.post(f"/calls/{quote(str(call_id), safe='')}/transfers", body=body)
+        return self.post(f"/calls/{_path_id(call_id, 'call_id')}/transfers", body=body)
 
     def add_call_comment(self, call_id, content):
         """Add a comment to a call."""
         return self.post(
-            f"/calls/{quote(str(call_id), safe='')}/comments", body={"content": content}
+            f"/calls/{_path_id(call_id, 'call_id')}/comments", body={"content": content}
         )
 
     def tag_call(self, call_id, tag_ids):
@@ -209,16 +225,16 @@ class AircallClient:
             logger.warning("aircall_request_rejected reason=tag_ids_not_list")
             raise ArgumentShapeError("tag_ids", "an array of tag IDs")
         return self.post(
-            f"/calls/{quote(str(call_id), safe='')}/tags", body={"tag_ids": tag_ids}
+            f"/calls/{_path_id(call_id, 'call_id')}/tags", body={"tag_ids": tag_ids}
         )
 
     def get_call_transcript(self, call_id):
         """Get the transcript for a call. Requires Aircall AI add-on."""
-        return self.get(f"/calls/{quote(str(call_id), safe='')}/transcript")
+        return self.get(f"/calls/{_path_id(call_id, 'call_id')}/transcript")
 
     def get_call_summary(self, call_id):
         """Get the AI-generated summary for a call."""
-        return self.get(f"/calls/{quote(str(call_id), safe='')}/summary")
+        return self.get(f"/calls/{_path_id(call_id, 'call_id')}/summary")
 
     # -------------------------------------------------------------------------
     # Contacts
@@ -234,7 +250,7 @@ class AircallClient:
 
     def get_contact(self, contact_id):
         """Get a specific contact by ID."""
-        return self.get(f"/contacts/{quote(str(contact_id), safe='')}")
+        return self.get(f"/contacts/{_path_id(contact_id, 'contact_id')}")
 
     def create_contact(
         self,
@@ -281,11 +297,11 @@ class AircallClient:
                     "phone_numbers", "an array of phone number objects"
                 )
             body["phone_numbers"] = phone_numbers
-        return self.patch(f"/contacts/{quote(str(contact_id), safe='')}", body=body)
+        return self.patch(f"/contacts/{_path_id(contact_id, 'contact_id')}", body=body)
 
     def delete_contact(self, contact_id):
         """Delete a contact by ID."""
-        return self.delete(f"/contacts/{quote(str(contact_id), safe='')}")
+        return self.delete(f"/contacts/{_path_id(contact_id, 'contact_id')}")
 
     # -------------------------------------------------------------------------
     # Users
@@ -298,7 +314,7 @@ class AircallClient:
 
     def get_user(self, user_id):
         """Get a specific user by ID."""
-        return self.get(f"/users/{quote(str(user_id), safe='')}")
+        return self.get(f"/users/{_path_id(user_id, 'user_id')}")
 
     # -------------------------------------------------------------------------
     # Teams
@@ -311,7 +327,7 @@ class AircallClient:
 
     def get_team(self, team_id):
         """Get a specific team by ID."""
-        return self.get(f"/teams/{quote(str(team_id), safe='')}")
+        return self.get(f"/teams/{_path_id(team_id, 'team_id')}")
 
     # -------------------------------------------------------------------------
     # Tags

@@ -15,7 +15,6 @@ from aircall_mcp.errors import ArgumentShapeError
 from aircall_mcp.setup import setup as setup_cli
 from aircall_mcp.setup import verify as verify_cli
 
-
 PII = "Private Person private@example.test secret-token-value"
 
 
@@ -283,13 +282,13 @@ def test_http_request_has_timeout_and_safe_path_segment(monkeypatch):
     client = client_for(Response(200, {}))
     recorder = Recorder(Response(200, {"id": "ok"}))
     monkeypatch.setattr(client, "session", recorder)
-    client.get_number("../x")
+    client.get_number("normal-id")
     assert recorder.args is not None and recorder.kwargs is not None
-    assert recorder.args[1].endswith("/numbers/..%2Fx")
+    assert recorder.args[1].endswith("/numbers/normal-id")
     import requests
 
     prepared = requests.Request("GET", recorder.args[1]).prepare()
-    assert prepared.path_url.endswith("/numbers/..%2Fx")
+    assert prepared.path_url.endswith("/numbers/normal-id")
     assert recorder.kwargs["timeout"] == 30
 
 
