@@ -2,20 +2,22 @@
 """Verify Aircall credentials by fetching company info."""
 
 from aircall_mcp.client import AircallClient
+from aircall_mcp.errors import AircallFailure
 
 
 def verify():
     try:
         client = AircallClient()
-        data = client.get_company()
-        company = data.get("company", data) if isinstance(data, dict) else data
-        name = "(unknown)"
-        if isinstance(company, dict):
-            name = company.get("name", name)
-        print(f"Connected successfully. Company: {name}")
-    except (RuntimeError, ValueError) as e:
+        client.get_company()
+        print("Connected successfully.")
+    except AircallFailure as e:
         print(f"Verification failed: {e}")
         raise SystemExit(1)
+    except Exception:
+        print(
+            "Verification failed: Aircall could not verify the credentials. Check the API ID and token, then retry."
+        )
+        raise SystemExit(1) from None
 
 
 def main():

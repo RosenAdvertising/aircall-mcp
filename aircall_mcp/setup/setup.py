@@ -7,6 +7,7 @@ when no keyring backend is available or ``AIRCALL_MCP_USE_KEYRING=0`` is set.
 """
 
 import os
+import getpass
 
 from aircall_mcp import credentials
 from aircall_mcp.setup.verify import verify
@@ -20,8 +21,12 @@ def main():
     )
     print()
 
-    api_id = input("Enter your Aircall API ID: ").strip()
-    api_token = input("Enter your Aircall API Token: ").strip()
+    try:
+        api_id = input("Enter your Aircall API ID: ").strip()
+        api_token = getpass.getpass("Enter your Aircall API Token: ").strip()
+    except EOFError:
+        print("Error: Setup input ended before credentials were entered.")
+        raise SystemExit(1) from None
 
     if not api_id or not api_token:
         print("Error: Both API ID and API Token are required.")

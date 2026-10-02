@@ -16,6 +16,7 @@ MCP server for Aircall — calls, contacts, transcripts, numbers, and team manag
 ## Requirements
 
 - Python 3.10+
+- Python MCP SDK `>=2.2,<3` (protocol revision: 2026-07-28)
 - Aircall account with API access
 
 ## Installation
@@ -51,6 +52,10 @@ disk in clear text.
 **File fallback.** On a host with no keyring backend (e.g. a headless Linux box
 without Secret Service), or if you set `AIRCALL_MCP_USE_KEYRING=0`, credentials
 fall back to a `~/.aircall-mcp/.env` file with `0600` permissions.
+
+On Windows, the file is stored in the user's profile and protected by Windows'
+default per-user access rules. On POSIX, files are created with `0600` permissions
+and writes fail closed if private permissions cannot be established.
 
 **Read order.** Credentials resolve in the order OS keyring → process environment
 → `.env` file. So a rotated secret in the keyring always wins, and an
@@ -119,5 +124,6 @@ Add to `claude_desktop_config.json`:
 ## Auth
 
 HTTP Basic Auth using `AIRCALL_API_ID:AIRCALL_API_TOKEN`, base64-encoded.
-Credentials are resolved at import time through the pluggable store described in
-[Credential storage](#credential-storage) (OS keyring first, `.env` file fallback).
+Credentials are resolved when a client is needed through the pluggable store
+described in [Credential storage](#credential-storage) (OS keyring first,
+`.env` file fallback).

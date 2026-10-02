@@ -28,6 +28,8 @@ import os
 from pathlib import Path
 from typing import Any
 
+from aircall_mcp.private_storage import atomic_private_write
+
 # --- per-MCP configuration --------------------------------------------------
 SERVICE_NAME = "aircall-mcp"
 CONFIG_DIR = Path.home() / ".aircall-mcp"
@@ -90,18 +92,10 @@ def _read_env_file() -> dict[str, str]:
 
 
 def _write_env_file(values: dict[str, str]) -> None:
-    """Write the fallback ``.env`` file with 0600 perms in a 0700 dir."""
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    try:
-        CONFIG_DIR.chmod(0o700)
-    except OSError:
-        pass
-    lines = [f"{k}={v}" for k, v in values.items()]
-    ENV_FILE.write_text("\n".join(lines) + ("\n" if lines else ""))
-    try:
-        ENV_FILE.chmod(0o600)
-    except OSError:
-        pass
+    """Atomically write a private fallback file, or fail without writing secrets."""
+    path = ENV_FILE
+    lines = [f"{key}={value}" for key, value in values.items()]
+    atomic_private_write(path, "\n".join(lines) + ("\n" if lines else ""))
 
 
 def get_secret(key: str, default: str = "") -> str:

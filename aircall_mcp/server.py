@@ -2,11 +2,174 @@
 """Aircall MCP server — calls, contacts, transcripts, numbers, and team management."""
 
 import json
+import logging
+from typing import Annotated
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server import MCPServer
+from mcp.server.mcpserver.exceptions import (
+    ResourceError,
+    ToolError,
+    UnexpectedToolError,
+)
+from mcp.shared.exceptions import MCPError
+from mcp_types import CallToolResult, TextContent
+from pydantic import BeforeValidator, Field, ValidationError
+
 from aircall_mcp.client import AircallClient
+from aircall_mcp.errors import (
+    ArgumentShapeError,
+    AuthenticationError,
+    AuthorizationError,
+    MissingCredentialsError,
+    NotFoundError,
+    RateLimitedError,
+    ReadTransportError,
+    TransportError,
+    VendorHTTPError,
+)
 
-mcp = FastMCP("aircall-mcp")
+logger = logging.getLogger(__name__)
+
+
+def _reject_boolean_path_id(value):
+    """Reject booleans before integer coercion; preserve all other SDK inputs."""
+    if isinstance(value, bool):
+        raise ValueError("Use an integer identifier, not a boolean.")
+    return value
+
+
+# A before-validator preserves the existing integer JSON schema and coercions.
+PathId = Annotated[int, BeforeValidator(_reject_boolean_path_id)]
+
+
+class SafeMCPServer(MCPServer):
+    """Keep SDK registrations while sanitizing anticipated and unexpected errors."""
+
+    async def call_tool(self, name, arguments, context=None):
+        try:
+            return await super().call_tool(name, arguments, context)
+        except MCPError:
+            raise
+        except Exception as exc:
+            failure = (
+                exc.__cause__
+                if isinstance(exc, ToolError)
+                and not isinstance(exc, UnexpectedToolError)
+                else None
+            )
+            if isinstance(failure, ValidationError):
+                text = _safe_validation_text(self, name, failure)
+                logger.info("tool_failed reason=invalid_arguments")
+            elif isinstance(failure, MissingCredentialsError):
+                text = (
+                    f"Error executing tool {name}: Aircall credentials are missing. "
+                    "Set AIRCALL_API_ID and AIRCALL_API_TOKEN or run aircall-mcp-setup."
+                )
+                logger.info("tool_failed reason=credentials_missing")
+            elif isinstance(failure, AuthorizationError):
+                text = (
+                    f"Error executing tool {name}: Aircall access denied: the connected account lacks permission for this action "
+                    "(or the authorization expired; re-run aircall-mcp-setup if so)."
+                )
+                logger.info("tool_failed reason=access_denied")
+            elif isinstance(failure, AuthenticationError):
+                text = f"Error executing tool {name}: Aircall authentication failed. Re-run aircall-mcp-setup to refresh the authorization."
+                logger.info("tool_failed reason=authentication_required")
+            elif isinstance(failure, RateLimitedError):
+                text = f"Error executing tool {name}: {failure}"
+                logger.info("tool_failed reason=rate_limited")
+            elif isinstance(failure, TransportError):
+                text = f"Error executing tool {name}: {failure}"
+                logger.info("tool_failed reason=transport_failure")
+            elif isinstance(failure, ReadTransportError):
+                text = f"Error executing tool {name}: {failure}"
+                logger.info("tool_failed reason=read_transport_failure")
+            elif isinstance(failure, NotFoundError):
+                text = f"Error executing tool {name}: The requested Aircall resource was not found."
+                logger.info("tool_failed reason=not_found")
+            elif isinstance(failure, VendorHTTPError):
+                text = (
+                    f"Error executing tool {name}: Aircall returned HTTP {failure.status_code}: "
+                    f"{failure.reason}."
+                )
+                logger.info("tool_failed reason=upstream_rejected")
+            elif isinstance(failure, ArgumentShapeError):
+                text = (
+                    f"Error executing tool {name}: Argument {failure.argument} must be "
+                    f"{failure.expected}."
+                )
+                logger.info("tool_failed reason=invalid_arguments")
+            else:
+                # Never include exception text, cause text, or traceback in logs/results.
+                text = f"Error executing tool {name}"
+                logger.error("tool_failed reason=unexpected")
+            return CallToolResult(
+                content=[TextContent(type="text", text=text)], is_error=True
+            )
+
+
+def _safe_validation_text(
+    server: SafeMCPServer, name: str, error: ValidationError
+) -> str:
+    tool = server._tool_manager.get_tool(name)
+    props = tool.parameters.get("properties", {}) if tool else {}
+    parts = []
+    for item in error.errors():
+        location = item.get("loc", ())
+        candidate = str(location[0]) if location else "arguments"
+        field = (
+            candidate if isinstance(props, dict) and candidate in props else "arguments"
+        )
+        schema = props.get(field, {}) if isinstance(props, dict) else {}
+        shape = _expected_shape(schema)
+        parts.append(f"{field} expected {shape}")
+    details = (
+        "; ".join(dict.fromkeys(parts)) or "arguments did not match the tool schema"
+    )
+    return f"Error executing tool {name}: Invalid arguments: {details}."
+
+
+def _expected_shape(schema: dict) -> str:
+    if "anyOf" in schema:
+        return " or ".join(_expected_shape(option) for option in schema["anyOf"])
+    kind = str(schema.get("type", ""))
+    if kind == "integer" and "minimum" in schema and "maximum" in schema:
+        return f"an integer from {schema['minimum']} to {schema['maximum']}"
+    if kind == "integer" and "minimum" in schema:
+        return f"an integer of at least {schema['minimum']}"
+    return {
+        "integer": "an integer",
+        "string": "a string",
+        "array": "an array",
+        "object": "an object",
+        "boolean": "a boolean",
+        "null": "null",
+    }.get(kind, "the documented argument shape")
+
+
+mcp = SafeMCPServer("aircall-mcp")
+
+PageNumber = Annotated[
+    int,
+    Field(ge=1, description="One-based Aircall API page number."),
+]
+ListLimit = Annotated[
+    int,
+    Field(
+        ge=1,
+        le=200,
+        description="Maximum number of records returned from the selected API page.",
+    ),
+]
+LegacyPageSize = Annotated[
+    int | None,
+    Field(
+        ge=1,
+        le=200,
+        deprecated=True,
+        description="Deprecated alias for limit.",
+    ),
+]
 
 
 def _client() -> AircallClient:
@@ -30,13 +193,19 @@ def get_company() -> dict:
 
 
 @mcp.tool()
-def list_numbers(page: int = 1, per_page: int = 25) -> dict:
-    """List all phone numbers configured in the Aircall account."""
-    return _client().list_numbers(page=page, per_page=per_page)
+def list_numbers(
+    page: PageNumber = 1,
+    limit: ListLimit = 25,
+    per_page: LegacyPageSize = None,
+) -> dict:
+    """List phone numbers. limit caps this page; per_page is a deprecated alias."""
+    return _client().list_numbers(
+        page=page, limit=per_page if per_page is not None else limit
+    )
 
 
 @mcp.tool()
-def get_number(number_id: int) -> dict:
+def get_number(number_id: PathId) -> dict:
     """Get details for a specific phone number by its ID."""
     return _client().get_number(number_id)
 
@@ -48,16 +217,17 @@ def get_number(number_id: int) -> dict:
 
 @mcp.tool()
 def list_calls(
-    page: int = 1,
-    per_page: int = 25,
+    page: PageNumber = 1,
+    limit: ListLimit = 25,
     number_id: int = 0,
     from_ts: int = 0,
     to_ts: int = 0,
+    per_page: LegacyPageSize = None,
 ) -> dict:
-    """List calls. Optionally filter by number_id (int), from_ts and to_ts (Unix timestamps). Pass 0 to omit a filter."""
+    """List calls. limit caps this page; optionally filter by number or Unix timestamps. per_page is a deprecated alias."""
     return _client().list_calls(
         page=page,
-        per_page=per_page,
+        limit=per_page if per_page is not None else limit,
         number_id=number_id,
         from_ts=from_ts,
         to_ts=to_ts,
@@ -65,7 +235,7 @@ def list_calls(
 
 
 @mcp.tool()
-def get_call(call_id: int) -> dict:
+def get_call(call_id: PathId) -> dict:
     """Get full details for a specific call by its ID."""
     return _client().get_call(call_id)
 
@@ -77,7 +247,7 @@ def initiate_call(number_id: int, to: str) -> dict:
 
 
 @mcp.tool()
-def transfer_call(call_id: int, user_id: int = 0, number_id: int = 0) -> dict:
+def transfer_call(call_id: PathId, user_id: int = 0, number_id: int = 0) -> dict:
     """Transfer an active call to a user or number. Pass 0 for values that should not be set."""
     return _client().transfer_call(
         call_id=call_id, user_id=user_id, number_id=number_id
@@ -85,25 +255,25 @@ def transfer_call(call_id: int, user_id: int = 0, number_id: int = 0) -> dict:
 
 
 @mcp.tool()
-def add_call_comment(call_id: int, content: str) -> dict:
+def add_call_comment(call_id: PathId, content: str) -> dict:
     """Add a text comment to a call record."""
     return _client().add_call_comment(call_id=call_id, content=content)
 
 
 @mcp.tool()
-def tag_call(call_id: int, tag_ids: list) -> dict:
+def tag_call(call_id: PathId, tag_ids: list) -> dict:
     """Tag a call with one or more tag IDs."""
     return _client().tag_call(call_id=call_id, tag_ids=tag_ids)
 
 
 @mcp.tool()
-def get_call_transcript(call_id: int) -> dict:
+def get_call_transcript(call_id: PathId) -> dict:
     """Get the transcript for a call. Requires Aircall AI add-on."""
     return _client().get_call_transcript(call_id)
 
 
 @mcp.tool()
-def get_call_summary(call_id: int) -> dict:
+def get_call_summary(call_id: PathId) -> dict:
     """Get the AI-generated summary for a call."""
     return _client().get_call_summary(call_id)
 
@@ -114,13 +284,22 @@ def get_call_summary(call_id: int) -> dict:
 
 
 @mcp.tool()
-def list_contacts(page: int = 1, per_page: int = 25, query: str = "") -> dict:
-    """List contacts. Optionally pass a search query string to filter results."""
-    return _client().list_contacts(page=page, per_page=per_page, query=query)
+def list_contacts(
+    page: PageNumber = 1,
+    limit: ListLimit = 25,
+    query: str = "",
+    per_page: LegacyPageSize = None,
+) -> dict:
+    """List contacts. limit caps this page; per_page is a deprecated alias."""
+    return _client().list_contacts(
+        page=page,
+        limit=per_page if per_page is not None else limit,
+        query=query,
+    )
 
 
 @mcp.tool()
-def get_contact(contact_id: int) -> dict:
+def get_contact(contact_id: PathId) -> dict:
     """Get a specific contact by its ID."""
     return _client().get_contact(contact_id)
 
@@ -143,7 +322,7 @@ def create_contact(
 
 @mcp.tool()
 def update_contact(
-    contact_id: int,
+    contact_id: PathId,
     first_name: str = "",
     last_name: str = "",
     phone_numbers: list | None = None,
@@ -158,7 +337,7 @@ def update_contact(
 
 
 @mcp.tool()
-def delete_contact(contact_id: int) -> dict:
+def delete_contact(contact_id: PathId) -> dict:
     """Delete a contact by its ID."""
     return _client().delete_contact(contact_id)
 
@@ -169,13 +348,17 @@ def delete_contact(contact_id: int) -> dict:
 
 
 @mcp.tool()
-def list_users(page: int = 1, per_page: int = 25) -> dict:
-    """List all users in the Aircall account."""
-    return _client().list_users(page=page, per_page=per_page)
+def list_users(
+    page: PageNumber = 1,
+    limit: ListLimit = 25,
+    per_page: LegacyPageSize = None,
+) -> dict:
+    """List users. limit caps this page; per_page is a deprecated alias."""
+    return _client().list_users(page=page, limit=per_page if per_page else limit)
 
 
 @mcp.tool()
-def get_user(user_id: int) -> dict:
+def get_user(user_id: PathId) -> dict:
     """Get details for a specific user by their ID."""
     return _client().get_user(user_id)
 
@@ -186,13 +369,17 @@ def get_user(user_id: int) -> dict:
 
 
 @mcp.tool()
-def list_teams(page: int = 1, per_page: int = 25) -> dict:
-    """List all teams in the Aircall account."""
-    return _client().list_teams(page=page, per_page=per_page)
+def list_teams(
+    page: PageNumber = 1,
+    limit: ListLimit = 25,
+    per_page: LegacyPageSize = None,
+) -> dict:
+    """List teams. limit caps this page; per_page is a deprecated alias."""
+    return _client().list_teams(page=page, limit=per_page if per_page else limit)
 
 
 @mcp.tool()
-def get_team(team_id: int) -> dict:
+def get_team(team_id: PathId) -> dict:
     """Get details for a specific team by its ID."""
     return _client().get_team(team_id)
 
@@ -203,9 +390,9 @@ def get_team(team_id: int) -> dict:
 
 
 @mcp.tool()
-def list_tags() -> dict:
-    """List all call tags defined in the Aircall account."""
-    return _client().list_tags()
+def list_tags(limit: ListLimit = 25) -> dict:
+    """List call tags, capped at limit records."""
+    return _client().list_tags(limit=limit)
 
 
 @mcp.tool()
@@ -221,14 +408,46 @@ def create_tag(name: str, color: str = "") -> dict:
 
 @mcp.resource("aircall://numbers", mime_type="application/json")
 def numbers_resource() -> str:
-    """All phone numbers configured in this Aircall account — read-only reference data."""
-    return json.dumps(_client().list_numbers(per_page=100), indent=2)
+    """Up to 100 phone numbers in this Aircall account — read-only reference data."""
+    try:
+        return json.dumps(_client().list_numbers(limit=100), indent=2)
+    except (
+        MissingCredentialsError,
+        AuthorizationError,
+        AuthenticationError,
+        RateLimitedError,
+        TransportError,
+        ReadTransportError,
+        NotFoundError,
+        VendorHTTPError,
+    ) as exc:
+        raise ResourceError(str(exc)) from None
+    except Exception:
+        raise ResourceError(
+            "Unable to read this Aircall resource. Try again or check the connection."
+        ) from None
 
 
 @mcp.resource("aircall://tags", mime_type="application/json")
 def tags_resource() -> str:
-    """All call tags defined in this Aircall account — read-only reference data."""
-    return json.dumps(_client().list_tags(), indent=2)
+    """Up to 200 call tags in this Aircall account — read-only reference data."""
+    try:
+        return json.dumps(_client().list_tags(limit=200), indent=2)
+    except (
+        MissingCredentialsError,
+        AuthorizationError,
+        AuthenticationError,
+        RateLimitedError,
+        TransportError,
+        ReadTransportError,
+        NotFoundError,
+        VendorHTTPError,
+    ) as exc:
+        raise ResourceError(str(exc)) from None
+    except Exception:
+        raise ResourceError(
+            "Unable to read this Aircall resource. Try again or check the connection."
+        ) from None
 
 
 @mcp.resource("aircall://security-notes", mime_type="text/markdown")
