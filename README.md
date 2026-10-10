@@ -84,6 +84,8 @@ aircall-mcp
 
 `AIRCALL_MCP_TRANSPORT=streamable-http` serves stateless Streamable HTTP at `/mcp`. Stdio remains the default. Aircall credentials stay in `AIRCALL_API_ID` and `AIRCALL_API_TOKEN`; HTTP mode reads those same variables and never takes them from the request.
 
+> **Security: this endpoint has no authentication and no TLS.** Anyone who can reach the port can run every tool, including write and delete tools, with this server's vendor credentials. Keep the default loopback bind (`127.0.0.1`), or put the server behind an authenticating TLS proxy on a private network. `AIRCALL_MCP_ALLOWED_HOSTS` and `AIRCALL_MCP_ALLOWED_ORIGINS` protect against browser DNS rebinding, not against direct callers. A proxy in front of it needs connection and idle timeouts: a legacy-style `GET /mcp` with `Accept: text/event-stream` holds a stream open until the client disconnects.
+
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `AIRCALL_MCP_TRANSPORT` | `stdio` | `stdio` or `streamable-http` |

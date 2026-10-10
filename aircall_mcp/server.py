@@ -5,7 +5,7 @@ import asyncio
 import json
 import logging
 import os
-from importlib.metadata import version
+from importlib.metadata import PackageNotFoundError, version
 from typing import Annotated
 
 from mcp.server import MCPServer
@@ -19,6 +19,7 @@ from mcp.shared.exceptions import MCPError
 from mcp_types import CallToolResult, TextContent
 from pydantic import BeforeValidator, Field, ValidationError
 
+import aircall_mcp
 from aircall_mcp.client import AircallClient
 from aircall_mcp.errors import (
     ArgumentShapeError,
@@ -151,10 +152,18 @@ def _expected_shape(schema: dict) -> str:
     }.get(kind, "the documented argument shape")
 
 
+def _server_version() -> str:
+    """Distribution version; a checkout without the dist installed still imports."""
+    try:
+        return version("aircall-mcp")
+    except PackageNotFoundError:
+        return getattr(aircall_mcp, "__version__", "0.0.0+local")
+
+
 mcp = SafeMCPServer(
     "aircall-mcp",
     title="Aircall MCP",
-    version=version("aircall-mcp"),
+    version=_server_version(),
 )
 
 PageNumber = Annotated[

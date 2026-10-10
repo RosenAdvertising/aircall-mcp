@@ -3,14 +3,19 @@
 from __future__ import annotations
 
 import asyncio
+import importlib.metadata
+import importlib.util
 import json
+import sys
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 import httpx2 as httpx
 import pytest
 from mcp import Client
 
+import aircall_mcp
 from aircall_mcp import server
 from test_canary_regressions import FakeResponse, _bare_client
 
@@ -20,6 +25,7 @@ CLIENT_CAPABILITIES_META_KEY = "io.modelcontextprotocol/clientCapabilities"
 CLIENT_INFO_META_KEY = "io.modelcontextprotocol/clientInfo"
 SERVER_INFO_META_KEY = "io.modelcontextprotocol/serverInfo"
 LOOPBACK = "http://127.0.0.1:8080"
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _modern_request(
@@ -269,3 +275,70 @@ def test_get_and_delete_are_rejected_and_discover_names_version() -> None:
     version = result["_meta"][SERVER_INFO_META_KEY]["version"]
     assert isinstance(version, str) and version
     assert "mcp-session-id" not in discover.headers
+
+
+# ---------------------------------------------------------------------------
+# Security review fixes (2026-10-10): F3, F4, F7, F8
+# ---------------------------------------------------------------------------
+
+
+def test_empty_transport_selects_stdio(monkeypatch) -> None:
+    """F3: a set-but-empty or blank transport falls back to stdio, as at BASE."""
+    calls: list[str] = []
+    monkeypatch.setattr(server.mcp, "run", lambda: calls.append("stdio"))
+
+    monkeypatch.setenv("AIRCALL_MCP_TRANSPORT", "")
+    assert server._requested_transport() == "stdio"
+    server.main()
+    assert calls == ["stdio"]
+
+    monkeypatch.setenv("AIRCALL_MCP_TRANSPORT", "   ")
+    assert server._requested_transport() == "stdio"
+    server.main()
+    assert calls == ["stdio", "stdio"]
+
+
+def test_empty_host_defaults_to_loopback(monkeypatch) -> None:
+    """F4: a set-but-empty or blank host resolves to loopback, never to uvicorn."""
+    monkeypatch.setenv("AIRCALL_MCP_HOST", "")
+    assert server._host() == "127.0.0.1"
+    assert server._transport_security() is None
+
+    monkeypatch.setenv("AIRCALL_MCP_HOST", "   ")
+    assert server._host() == "127.0.0.1"
+    assert server._transport_security() is None
+
+
+def test_uppercase_localhost_is_not_loopback(monkeypatch) -> None:
+    """F7: the loopback check is exact; LOCALHOST must not count as loopback."""
+    monkeypatch.setenv("AIRCALL_MCP_HOST", "LOCALHOST")
+    monkeypatch.delenv("AIRCALL_MCP_ALLOWED_HOSTS", raising=False)
+    assert server._host() == "LOCALHOST"
+    with pytest.raises(SystemExit) as caught:
+        server.create_serve_app()
+    assert "AIRCALL_MCP_ALLOWED_HOSTS" in str(caught.value)
+    assert "LOCALHOST" in str(caught.value)
+
+
+def test_import_survives_missing_distribution_metadata(monkeypatch) -> None:
+    """F8: importing from a checkout without the installed dist must not raise."""
+
+    def missing(name):
+        raise importlib.metadata.PackageNotFoundError(name)
+
+    monkeypatch.setattr(importlib.metadata, "version", missing)
+
+    spec = importlib.util.spec_from_file_location(
+        "aircall_mcp_server_fresh_import",
+        REPO_ROOT / "aircall_mcp" / "server.py",
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["aircall_mcp_server_fresh_import"] = module
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        del sys.modules["aircall_mcp_server_fresh_import"]
+
+    fallback = getattr(aircall_mcp, "__version__", "0.0.0+local")
+    assert module.mcp._lowlevel_server.version == fallback
