@@ -473,8 +473,22 @@ def security_notes_resource() -> str:
 
     ## Credentials
     - **AIRCALL_API_ID** and **AIRCALL_API_TOKEN**: Aircall API key pair (Basic Auth).
-    - Resolution order: OS keyring (macOS Keychain / libsecret) → process env →
-      `~/.aircall-mcp/.env` (chmod 0600 fallback). Set via `aircall-mcp-setup`.
+      They come from the server's own configuration, never from the client or a request.
+    - Read order: process environment, then the OS keyring (macOS Keychain, Windows
+      Credential Manager, Linux Secret Service), then `~/.aircall-mcp/.env`.
+    - `aircall-mcp-setup` stores them in the OS keyring. The `.env` file (mode 0600) is
+      used only when no keyring is available or `AIRCALL_MCP_USE_KEYRING=0`.
+
+    ## Transport
+    - stdio is the default.
+    - Opt-in stateless Streamable HTTP (`AIRCALL_MCP_TRANSPORT=streamable-http`, endpoint
+      `/mcp`) has no authentication and no TLS. Anyone who can reach the port can run
+      every tool, including write and delete tools, with this server's Aircall credentials.
+    - Keep the default loopback bind (`127.0.0.1`), or put the server behind an
+      authenticating TLS proxy on a private network.
+    - `AIRCALL_MCP_ALLOWED_HOSTS` and `AIRCALL_MCP_ALLOWED_ORIGINS` protect against browser
+      DNS rebinding, not against direct callers. A non-loopback `AIRCALL_MCP_HOST` requires
+      `AIRCALL_MCP_ALLOWED_HOSTS`.
 
     ## Tool classification
     - **Read-only (safe):** get_company, list_numbers, get_number, list_calls, get_call,
