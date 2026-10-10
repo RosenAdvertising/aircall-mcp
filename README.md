@@ -16,7 +16,7 @@ MCP server for Aircall — calls, contacts, transcripts, numbers, and team manag
 ## Requirements
 
 - Python 3.10+
-- Python MCP SDK `>=2.2,<3` (protocol revision: 2026-07-28)
+- Python MCP SDK `>=2.3,<3` (protocol revision: 2026-07-28)
 - Aircall account with API access
 
 ## Installation
@@ -79,6 +79,26 @@ aircall-mcp-verify
 ```bash
 aircall-mcp
 ```
+
+## HTTP mode
+
+`AIRCALL_MCP_TRANSPORT=streamable-http` serves stateless Streamable HTTP at `/mcp`. Stdio remains the default. Aircall credentials stay in `AIRCALL_API_ID` and `AIRCALL_API_TOKEN`; HTTP mode reads those same variables and never takes them from the request.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `AIRCALL_MCP_TRANSPORT` | `stdio` | `stdio` or `streamable-http` |
+| `AIRCALL_MCP_HOST` | `127.0.0.1` | Bind address. A non-loopback address requires `AIRCALL_MCP_ALLOWED_HOSTS` |
+| `PORT` | `8080` | Bind port |
+| `AIRCALL_MCP_ALLOWED_HOSTS` | unset | Comma-separated Host allowlist, required when the bind address is not loopback |
+| `AIRCALL_MCP_ALLOWED_ORIGINS` | unset | Optional comma-separated Origin allowlist used with the Host allowlist |
+| `AIRCALL_API_ID` | unset | Aircall API ID |
+| `AIRCALL_API_TOKEN` | unset | Aircall API token |
+
+```bash
+AIRCALL_MCP_TRANSPORT=streamable-http PORT=8080 aircall-mcp
+```
+
+The endpoint is `http://127.0.0.1:8080/mcp`.
 
 ## Claude Desktop config
 
