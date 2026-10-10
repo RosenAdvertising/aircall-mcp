@@ -1,4 +1,4 @@
-"""Regression coverage for the fleet canary checks."""
+"""Regression coverage for the pre-release canary checks."""
 
 from __future__ import annotations
 

@@ -5,9 +5,20 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "aircall-mcp"
 version = "0.1.0"
-description = "MCP server for Aircall — calls, contacts, transcripts, numbers, and team management for law firms"
+description = "MCP server for Aircall: calls, transcripts, contacts, numbers and teams."
 license = { text = "MIT" }
 requires-python = ">=3.10"
+classifiers = [
+    "Intended Audience :: Legal Industry",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Office/Business",
+]
 dependencies = [
     "mcp>=2.3,<3",
     "requests>=2.34.2",
@@ -26,6 +37,11 @@ dev = [
 aircall-mcp = "aircall_mcp.server:main"
 aircall-mcp-setup = "aircall_mcp.setup.setup:main"
 aircall-mcp-verify = "aircall_mcp.setup.verify:main"
+
+[project.urls]
+Homepage = "https://github.com/RosenAdvertising/aircall-mcp"
+Repository = "https://github.com/RosenAdvertising/aircall-mcp"
+Issues = "https://github.com/RosenAdvertising/aircall-mcp/issues"
 
 [tool.pyright]
 venvPath = "."

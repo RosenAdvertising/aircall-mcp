@@ -34,7 +34,7 @@ def main() -> int:
     parser.add_argument(
         "--mcp-only",
         action="store_true",
-        help="Compatibility flag shared with fleet spec guards.",
+        help="Compatibility flag shared with the other spec guards.",
     )
     parser.parse_args()
 
